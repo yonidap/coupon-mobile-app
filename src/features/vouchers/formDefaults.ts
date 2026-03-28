@@ -1,16 +1,18 @@
 import type { Voucher } from '../../types/domain';
 import { getTodayDateInput } from '../../utils/formatters';
+import { defaultVoucherCategory } from './categories';
 import type { VoucherFormValues } from './schemas';
 
 export function createVoucherFormDefaults(currency = 'ILS'): VoucherFormValues {
   return {
-    title: '',
+    voucherType: 'monetary',
+    category: defaultVoucherCategory,
+    productName: '',
     merchantName: '',
-    category: '',
     faceValue: '',
-    paidValue: '',
+    usedValue: '0',
     currency,
-    purchaseDate: getTodayDateInput(),
+    purchaseDate: '',
     expiryDate: getTodayDateInput(),
     code: '',
     notes: '',
@@ -20,11 +22,12 @@ export function createVoucherFormDefaults(currency = 'ILS'): VoucherFormValues {
 
 export function mapVoucherToFormValues(voucher: Voucher): VoucherFormValues {
   return {
-    title: voucher.title,
+    voucherType: voucher.voucherType,
+    category: voucher.category ?? defaultVoucherCategory,
+    productName: voucher.productName ?? '',
     merchantName: voucher.merchantName ?? '',
-    category: voucher.category ?? '',
     faceValue: voucher.faceValue?.toString() ?? '',
-    paidValue: voucher.paidValue?.toString() ?? '',
+    usedValue: voucher.usedValue?.toString() ?? '0',
     currency: voucher.currency,
     purchaseDate: voucher.purchaseDate ?? '',
     expiryDate: voucher.expiryDate,

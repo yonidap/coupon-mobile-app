@@ -100,6 +100,7 @@ export const attachmentsRepository = {
 
     if (error) {
       if (isMissingRelationError(error)) {
+        console.error('[attachmentsRepository] listByVoucherIds: table not found, returning empty:', error);
         return grouped;
       }
 
@@ -139,15 +140,20 @@ export const attachmentsRepository = {
 
   async createRecord(input: CreateAttachmentInput): Promise<VoucherAttachment> {
     const client = maybeGetSupabaseClient();
-    const fallbackAttachment = buildLocalAttachment(input);
 
     if (!client) {
-      return fallbackAttachment;
+      return buildLocalAttachment(input);
     }
 
-    const { data, error } = await client
+    // Use a client-generated UUID so we can return the attachment object without
+    // needing to SELECT back the inserted row. A plain INSERT avoids the
+    // PostgREST RETURNING+SELECT-RLS interaction that can silently fail.
+    const id = crypto.randomUUID();
+
+    const { error } = await client
       .from('voucher_attachments')
       .insert({
+        id,
         voucher_id: input.voucherId,
         storage_bucket: input.storageBucket,
         storage_path: input.storagePath,
@@ -156,19 +162,29 @@ export const attachmentsRepository = {
         file_name: input.fileName,
         file_size_bytes: input.fileSizeBytes,
         uploaded_by_user_id: input.uploadedByUserId,
-      })
-      .select('*')
-      .single();
+      });
 
     if (error) {
       if (isMissingRelationError(error)) {
-        return fallbackAttachment;
+        console.error('[attachmentsRepository] createRecord: table not found in schema, using local fallback:', error);
+        return buildLocalAttachment(input);
       }
 
       throw new Error(error.message);
     }
 
-    return mapAttachment(data);
+    return {
+      id,
+      voucherId: input.voucherId,
+      storageBucket: input.storageBucket,
+      storagePath: input.storagePath,
+      fileName: input.fileName,
+      mimeType: input.mimeType,
+      fileSizeBytes: input.fileSizeBytes,
+      uploadedByUserId: input.uploadedByUserId,
+      kind: input.kind,
+      createdAt: new Date().toISOString(),
+    };
   },
 
   async createSignedReadUrl(attachment: VoucherAttachment): Promise<string | null> {

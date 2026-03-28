@@ -3,7 +3,15 @@ export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
   Home: undefined;
+  VoucherCreateEntry: undefined;
   VoucherDetails: { voucherId: string };
-  VoucherForm: { voucherId?: string } | undefined;
+  VoucherForm:
+    | {
+        voucherId?: string;
+        createMode?: 'manual' | 'upload';
+        initialVoucherType?: 'monetary' | 'product';
+        autoPickAttachment?: boolean;
+      }
+    | undefined;
   Settings: undefined;
 };

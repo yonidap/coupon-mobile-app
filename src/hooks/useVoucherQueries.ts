@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { VoucherFormValues } from '../features/vouchers/schemas';
+import type { PickedAttachment } from '../types/domain';
+import { voucherExtractionService } from '../services/voucherExtractionService';
 import { voucherService } from '../services/voucherService';
 
 const voucherKeys = {
@@ -92,6 +94,43 @@ export function useMarkVoucherRedeemedMutation(userId?: string) {
 
       await queryClient.invalidateQueries({ queryKey: voucherKeys.list(userId) });
       await queryClient.invalidateQueries({ queryKey: voucherKeys.detail(userId, voucher.id) });
+    },
+  });
+}
+
+export function useAddVoucherUsageMutation(userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ voucherId, amount }: { voucherId: string; amount: number }) => {
+      if (!userId) {
+        throw new Error('You must be signed in to update a voucher.');
+      }
+
+      return voucherService.addVoucherUsage(userId, voucherId, amount);
+    },
+    onSuccess: async (voucher) => {
+      if (!userId) {
+        return;
+      }
+
+      await queryClient.invalidateQueries({ queryKey: voucherKeys.list(userId) });
+      await queryClient.invalidateQueries({ queryKey: voucherKeys.detail(userId, voucher.id) });
+    },
+  });
+}
+
+export function useExtractVoucherDraftMutation(userId?: string) {
+  return useMutation({
+    mutationFn: async ({ attachment }: { attachment: PickedAttachment }) => {
+      if (!userId) {
+        throw new Error('You must be signed in to extract voucher details.');
+      }
+
+      return voucherExtractionService.suggestVoucherDraft({
+        userId,
+        attachment,
+      });
     },
   });
 }

@@ -1,3 +1,5 @@
+import type { VoucherCategory } from '../features/vouchers/categories';
+
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 // ---------------------------------------------------------------------------
@@ -14,6 +16,7 @@ export interface Database {
           display_name: string | null;
           default_currency: string;
           language: string;
+          timezone: string;
           notifications_enabled: boolean;
           default_reminder_offsets: number[];
           created_at: string;
@@ -24,6 +27,7 @@ export interface Database {
           display_name?: string | null;
           default_currency?: string;
           language?: string;
+          timezone?: string;
           notifications_enabled?: boolean;
           default_reminder_offsets?: number[];
           created_at?: string;
@@ -33,6 +37,7 @@ export interface Database {
           display_name?: string | null;
           default_currency?: string;
           language?: string;
+          timezone?: string;
           notifications_enabled?: boolean;
           default_reminder_offsets?: number[];
           updated_at?: string;
@@ -94,10 +99,13 @@ export interface Database {
           id: string;
           wallet_id: string;
           created_by_user_id: string;
+          voucher_type: 'monetary' | 'product';
           title: string;
+          product_name: string | null;
           merchant_name: string | null;
-          category: string | null;
+          category: VoucherCategory | null;
           face_value: number | null;
+          used_value: number;
           paid_value: number | null;
           currency: string;
           purchase_date: string | null;
@@ -115,10 +123,13 @@ export interface Database {
           id?: string;
           wallet_id: string;
           created_by_user_id: string;
+          voucher_type?: 'monetary' | 'product';
           title: string;
+          product_name?: string | null;
           merchant_name?: string | null;
-          category?: string | null;
+          category?: VoucherCategory | null;
           face_value?: number | null;
+          used_value?: number;
           paid_value?: number | null;
           currency: string;
           purchase_date?: string | null;
@@ -134,9 +145,12 @@ export interface Database {
         };
         Update: {
           title?: string;
+          voucher_type?: 'monetary' | 'product';
+          product_name?: string | null;
           merchant_name?: string | null;
-          category?: string | null;
+          category?: VoucherCategory | null;
           face_value?: number | null;
+          used_value?: number;
           paid_value?: number | null;
           currency?: string;
           purchase_date?: string | null;

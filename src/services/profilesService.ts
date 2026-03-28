@@ -1,4 +1,5 @@
 import { profilesRepository } from '../repositories/profilesRepository';
+import type { SupportedLanguage } from '../features/settings/language';
 
 export const profilesService = {
   async getProfile(userId: string) {
@@ -9,7 +10,8 @@ export const profilesService = {
     id: string;
     displayName: string | null;
     defaultCurrency: string;
-    language: string;
+    language: SupportedLanguage;
+    timezone?: string;
     notificationsEnabled?: boolean;
     defaultReminderOffsets?: number[];
   }) {

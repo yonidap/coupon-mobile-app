@@ -1,4 +1,5 @@
 import type { Voucher } from '../types/domain';
+import type { VoucherCategory } from '../features/vouchers/categories';
 import { maybeGetSupabaseClient } from '../lib/supabase';
 import { createLocalId } from '../utils/formatters';
 import { isMissingRelationError } from '../utils/supabase';
@@ -9,9 +10,12 @@ type VoucherUpsertInput = {
   walletId: string;
   createdByUserId: string;
   title: string;
+  voucherType: 'monetary' | 'product';
+  productName: string | null;
   merchantName: string | null;
-  category: string | null;
+  category: VoucherCategory;
   faceValue: number | null;
+  usedValue: number;
   paidValue: number | null;
   currency: string;
   purchaseDate: string | null;
@@ -26,10 +30,13 @@ function mapVoucher(row: {
   id: string;
   wallet_id: string;
   created_by_user_id: string;
+  voucher_type: 'monetary' | 'product' | null;
   title: string;
+  product_name: string | null;
   merchant_name: string | null;
-  category: string | null;
+  category: VoucherCategory | null;
   face_value: number | null;
+  used_value: number | null;
   paid_value: number | null;
   currency: string;
   purchase_date: string | null;
@@ -43,14 +50,22 @@ function mapVoucher(row: {
   created_at: string;
   updated_at: string;
 }): Voucher {
+  const voucherType = row.voucher_type ?? 'monetary';
+  const usedValue = row.used_value ?? 0;
+  const remainingValue = voucherType === 'monetary' && row.face_value !== null ? Math.max(row.face_value - usedValue, 0) : null;
+
   return {
     id: row.id,
     walletId: row.wallet_id,
     createdByUserId: row.created_by_user_id,
+    voucherType,
     title: row.title,
+    productName: row.product_name,
     merchantName: row.merchant_name,
     category: row.category,
     faceValue: row.face_value,
+    usedValue,
+    remainingValue,
     paidValue: row.paid_value,
     currency: row.currency,
     purchaseDate: row.purchase_date,
@@ -86,10 +101,14 @@ function upsertFallbackVoucher(input: VoucherUpsertInput): Voucher {
     id: voucherId,
     walletId: input.walletId,
     createdByUserId: input.createdByUserId,
+    voucherType: input.voucherType,
     title: input.title,
+    productName: input.productName,
     merchantName: input.merchantName,
     category: input.category,
     faceValue: input.faceValue,
+    usedValue: input.usedValue,
+    remainingValue: input.voucherType === 'monetary' && input.faceValue !== null ? Math.max(input.faceValue - input.usedValue, 0) : null,
     paidValue: input.paidValue,
     currency: input.currency,
     purchaseDate: input.purchaseDate,
@@ -179,10 +198,13 @@ export const vouchersRepository = {
         id: input.voucherId,
         wallet_id: input.walletId,
         created_by_user_id: input.createdByUserId,
+        voucher_type: input.voucherType,
         title: input.title,
+        product_name: input.productName,
         merchant_name: input.merchantName,
         category: input.category,
         face_value: input.faceValue,
+        used_value: input.usedValue,
         paid_value: input.paidValue,
         currency: input.currency,
         purchase_date: input.purchaseDate,
@@ -237,7 +259,6 @@ export const vouchersRepository = {
         redeemed_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
-      .eq('wallet_id', walletId)
       .eq('id', voucherId)
       .select('*')
       .single();
@@ -248,6 +269,78 @@ export const vouchersRepository = {
 
     const [voucher] = await hydrateAttachments([mapVoucher(data)]);
     return voucher;
+  },
+
+  async updateMonetaryUsage(walletId: string, voucherId: string, usedValue: number): Promise<Voucher> {
+    const client = maybeGetSupabaseClient();
+
+    if (!client) {
+      const voucher = readFallbackVouchers(walletId).find((item) => item.id === voucherId);
+
+      if (!voucher) {
+        throw new Error('Voucher not found.');
+      }
+
+      if (voucher.voucherType !== 'monetary' || voucher.faceValue === null) {
+        throw new Error('Usage updates are supported only for monetary vouchers.');
+      }
+
+      const clampedUsedValue = Math.max(0, Math.min(usedValue, voucher.faceValue));
+      const isRedeemed = clampedUsedValue >= voucher.faceValue;
+      const now = new Date().toISOString();
+
+      const updated: Voucher = {
+        ...voucher,
+        usedValue: clampedUsedValue,
+        remainingValue: Math.max(voucher.faceValue - clampedUsedValue, 0),
+        status: isRedeemed ? 'redeemed' : 'active',
+        redeemedAt: isRedeemed ? now : null,
+        updatedAt: now,
+      };
+
+      const next = readFallbackVouchers(walletId).filter((item) => item.id !== voucherId);
+      writeFallbackVouchers(walletId, [...next, updated]);
+
+      return updated;
+    }
+
+    const { data: current, error: readError } = await client
+      .from('vouchers')
+      .select('*')
+      .eq('id', voucherId)
+      .single();
+
+    if (readError) {
+      throw new Error(readError.message);
+    }
+
+    const voucher = mapVoucher(current);
+
+    if (voucher.voucherType !== 'monetary' || voucher.faceValue === null) {
+      throw new Error('Usage updates are supported only for monetary vouchers.');
+    }
+
+    const clampedUsedValue = Math.max(0, Math.min(usedValue, voucher.faceValue));
+    const isRedeemed = clampedUsedValue >= voucher.faceValue;
+
+    const { data, error } = await client
+      .from('vouchers')
+      .update({
+        used_value: clampedUsedValue,
+        status: isRedeemed ? 'redeemed' : 'active',
+        redeemed_at: isRedeemed ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', voucherId)
+      .select('*')
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const [updatedVoucher] = await hydrateAttachments([mapVoucher(data)]);
+    return updatedVoucher;
   },
 
   async deleteById(walletId: string, voucherId: string): Promise<void> {

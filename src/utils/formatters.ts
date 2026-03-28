@@ -1,6 +1,12 @@
-export function formatDateLabel(value: string | null | undefined): string {
+export function formatDateLabel(
+  value: string | null | undefined,
+  options?: {
+    locale?: string;
+    missingLabel?: string;
+  },
+): string {
   if (!value) {
-    return 'Not set';
+    return options?.missingLabel ?? 'Not set';
   }
 
   const date = new Date(value);
@@ -9,20 +15,27 @@ export function formatDateLabel(value: string | null | undefined): string {
     return value;
   }
 
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(options?.locale, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
   }).format(date);
 }
 
-export function formatCurrency(value: number | null | undefined, currency: string): string {
+export function formatCurrency(
+  value: number | null | undefined,
+  currency: string,
+  options?: {
+    locale?: string;
+    missingLabel?: string;
+  },
+): string {
   if (value === null || value === undefined) {
-    return 'No monetary value';
+    return options?.missingLabel ?? 'No monetary value';
   }
 
   try {
-    return new Intl.NumberFormat(undefined, {
+    return new Intl.NumberFormat(options?.locale, {
       style: 'currency',
       currency,
       maximumFractionDigits: 2,

@@ -5,6 +5,7 @@ import { authService } from '../services/authService';
 import { isSupabaseConfigured } from '../lib/env';
 import { notificationsService } from '../services/notificationsService';
 import { profilesService } from '../services/profilesService';
+import { getDeviceTimeZone } from '../utils/timezone';
 
 type AuthSessionContextValue = {
   session: Session | null;
@@ -68,6 +69,19 @@ export function AuthSessionProvider({ children }: { children: ReactNode }) {
     const registerPushToken = async () => {
       try {
         const profile = await profilesService.getProfile(userId);
+        const deviceTimeZone = getDeviceTimeZone();
+
+        if (profile.timezone !== deviceTimeZone) {
+          await profilesService.upsertProfile({
+            id: userId,
+            displayName: profile.displayName,
+            defaultCurrency: profile.defaultCurrency,
+            language: profile.language,
+            timezone: deviceTimeZone,
+            notificationsEnabled: profile.notificationsEnabled,
+            defaultReminderOffsets: profile.defaultReminderOffsets,
+          });
+        }
 
         if (!profile.notificationsEnabled) {
           return;

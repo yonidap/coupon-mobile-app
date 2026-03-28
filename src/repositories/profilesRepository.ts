@@ -1,12 +1,16 @@
 import type { Profile } from '../types/domain';
 import { maybeGetSupabaseClient, getSupabaseClient } from '../lib/supabase';
 import { isMissingRelationError } from '../utils/supabase';
+import { getDeviceTimeZone } from '../utils/timezone';
+import { DEFAULT_LANGUAGE } from '../features/settings/defaults';
+import { normalizeLanguage, type SupportedLanguage } from '../features/settings/language';
 
 type UpsertProfileInput = {
   id: string;
   displayName: string | null;
   defaultCurrency: string;
-  language: string;
+  language: SupportedLanguage;
+  timezone?: string;
   notificationsEnabled?: boolean;
   defaultReminderOffsets?: number[];
 };
@@ -16,6 +20,7 @@ function mapProfile(row: {
   display_name: string | null;
   default_currency: string;
   language: string;
+  timezone?: string | null;
   notifications_enabled: boolean;
   default_reminder_offsets: number[];
   created_at: string;
@@ -25,7 +30,8 @@ function mapProfile(row: {
     id: row.id,
     displayName: row.display_name,
     defaultCurrency: row.default_currency,
-    language: row.language,
+    language: normalizeLanguage(row.language),
+    timezone: row.timezone ?? 'UTC',
     notificationsEnabled: row.notifications_enabled,
     defaultReminderOffsets: row.default_reminder_offsets,
     createdAt: row.created_at,
@@ -40,7 +46,8 @@ function buildFallbackProfile(userId: string): Profile {
     id: userId,
     displayName: null,
     defaultCurrency: 'ILS',
-    language: 'he',
+    language: DEFAULT_LANGUAGE,
+    timezone: getDeviceTimeZone(),
     notificationsEnabled: true,
     defaultReminderOffsets: [30, 7, 1],
     createdAt: now,
@@ -78,6 +85,7 @@ export const profilesRepository = {
         display_name: input.displayName,
         default_currency: input.defaultCurrency,
         language: input.language,
+        timezone: input.timezone ?? getDeviceTimeZone(),
         notifications_enabled: input.notificationsEnabled ?? true,
         default_reminder_offsets: input.defaultReminderOffsets ?? [30, 7, 1],
         updated_at: new Date().toISOString(),

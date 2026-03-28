@@ -1,11 +1,13 @@
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+
+import { premiumTheme } from '../theme/premium';
 
 export function SplashScreen() {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Coupon Wallet</Text>
-      <Text style={styles.subtitle}>Bootstrapping secure session state...</Text>
-      <ActivityIndicator size="large" color="#1f5f4d" />
+      <View style={styles.orbLarge} />
+      <View style={styles.orbSmall} />
+      <ActivityIndicator size="large" color={premiumTheme.colors.accent} />
     </View>
   );
 }
@@ -15,17 +17,27 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f4f7f6',
+    backgroundColor: premiumTheme.colors.background,
     padding: 24,
     gap: 12,
+    overflow: 'hidden',
   },
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#17231f',
+  orbLarge: {
+    position: 'absolute',
+    top: -110,
+    right: -80,
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: 'rgba(138, 100, 39, 0.14)',
   },
-  subtitle: {
-    fontSize: 15,
-    color: '#556760',
+  orbSmall: {
+    position: 'absolute',
+    left: -60,
+    bottom: -100,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(54, 93, 156, 0.1)',
   },
 });

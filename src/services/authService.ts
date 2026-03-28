@@ -1,8 +1,10 @@
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 import { authRepository, type AuthCredentials, type RegisterInput } from '../repositories/authRepository';
+import { DEFAULT_LANGUAGE } from '../features/settings/defaults';
 import { profilesService } from './profilesService';
 import { walletsService } from './walletsService';
+import { getDeviceTimeZone } from '../utils/timezone';
 
 export const authService = {
   async signIn(credentials: AuthCredentials): Promise<Session | null> {
@@ -17,7 +19,8 @@ export const authService = {
         id: session.user.id,
         displayName: input.displayName ?? null,
         defaultCurrency: 'ILS',
-        language: 'he',
+        language: DEFAULT_LANGUAGE,
+        timezone: getDeviceTimeZone(),
         defaultReminderOffsets: [30, 7, 1],
       });
 

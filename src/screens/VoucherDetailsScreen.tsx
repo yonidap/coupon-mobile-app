@@ -1,25 +1,58 @@
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { EmptyState } from '../components/EmptyState';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { SectionCard } from '../components/SectionCard';
 import { useAuthSession } from '../hooks/useAuthSession';
-import { useDeleteVoucherMutation, useMarkVoucherRedeemedMutation, useVoucherDetails } from '../hooks/useVoucherQueries';
+import { useAppLanguage } from '../hooks/useAppLanguage';
+import {
+  formatCurrency,
+  formatDateLabel,
+} from '../utils/formatters';
+import {
+  getCategoryLabel,
+  getVoucherStatusLabel,
+  translateKnownMessage,
+} from '../i18n/translations';
+import { useAddVoucherUsageMutation, useDeleteVoucherMutation, useMarkVoucherRedeemedMutation, useVoucherDetails } from '../hooks/useVoucherQueries';
 import type { RootStackParamList } from '../navigation/types';
 import { attachmentService } from '../services/attachmentService';
-import { formatCurrency, formatDateLabel } from '../utils/formatters';
+import { premiumTheme } from '../theme/premium';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'VoucherDetails'>;
+type ConfirmActionType = 'markRedeemed' | 'delete' | null;
 
 export function VoucherDetailsScreen({ navigation, route }: Props) {
   const { user } = useAuthSession();
+  const { copy, language, locale, isRtl } = useAppLanguage();
   const voucherQuery = useVoucherDetails(user?.id, route.params.voucherId);
   const deleteMutation = useDeleteVoucherMutation(user?.id);
   const markRedeemedMutation = useMarkVoucherRedeemedMutation(user?.id);
+  const addUsageMutation = useAddVoucherUsageMutation(user?.id);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [isUsageModalVisible, setUsageModalVisible] = useState(false);
+  const [usageAmountInput, setUsageAmountInput] = useState('');
+  const [confirmActionType, setConfirmActionType] = useState<ConfirmActionType>(null);
   const voucher = voucherQuery.data?.voucher;
+  const isConfirmPending = markRedeemedMutation.isPending || deleteMutation.isPending;
+  const confirmConfig =
+    confirmActionType === 'delete'
+      ? {
+          title: copy.voucherDetails.deleteVoucherTitle,
+          message: copy.voucherDetails.deleteVoucherMessage,
+          confirmLabel: deleteMutation.isPending ? copy.common.deleting : copy.common.delete,
+          destructive: true,
+        }
+      : confirmActionType === 'markRedeemed'
+        ? {
+          title: copy.voucherDetails.markRedeemedTitle,
+          message: copy.voucherDetails.markRedeemedMessage,
+          confirmLabel: markRedeemedMutation.isPending ? copy.common.updating : copy.voucherDetails.markAsRedeemed,
+          destructive: false,
+        }
+        : null;
 
   async function handleOpenAttachment(attachmentId: string) {
     if (!voucher) {
@@ -42,129 +75,251 @@ export function VoucherDetailsScreen({ navigation, route }: Props) {
 
       await Linking.openURL(signedUrl);
     } catch (error) {
-      setAttachmentError('Unable to open attachment. Please try again.');
+      console.error('[VoucherDetailsScreen] Open attachment failed:', error);
+      setAttachmentError(copy.voucherDetails.attachmentFailedMessage);
     }
   }
 
-  async function handleMarkRedeemed() {
+  function handleMarkRedeemed() {
     if (!voucher) {
       return;
     }
 
-    Alert.alert('Mark as redeemed', 'This voucher will move to redeemed status.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Mark redeemed',
-        onPress: async () => {
-          try {
-            await markRedeemedMutation.mutateAsync({ voucherId: voucher.id });
-            Alert.alert('Updated', 'Voucher marked as redeemed.');
-          } catch {
-            Alert.alert('Update failed', 'We could not mark this voucher as redeemed. Please try again.');
-          }
-        },
-      },
-    ]);
+    setConfirmActionType('markRedeemed');
   }
 
-  async function handleDelete() {
+  function closeConfirmModal() {
+    if (isConfirmPending) {
+      return;
+    }
+
+    setConfirmActionType(null);
+  }
+
+  function openUsageModal() {
+    setUsageAmountInput('');
+    setUsageModalVisible(true);
+  }
+
+  function closeUsageModal() {
+    if (addUsageMutation.isPending) {
+      return;
+    }
+
+    setUsageModalVisible(false);
+  }
+
+  async function handleSubmitUsageUpdate() {
+    if (!voucher || voucher.voucherType !== 'monetary' || voucher.faceValue === null) {
+      return;
+    }
+
+    const parsedAmount = Number(usageAmountInput.trim().replace(',', '.'));
+
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      Alert.alert(copy.common.invalidAmountTitle, copy.common.invalidAmountMessage);
+      return;
+    }
+
+    try {
+      await addUsageMutation.mutateAsync({
+        voucherId: voucher.id,
+        amount: parsedAmount,
+      });
+      setUsageModalVisible(false);
+      setUsageAmountInput('');
+      Alert.alert(copy.common.updatedTitle, copy.voucherDetails.usageUpdatedMessage);
+    } catch (error) {
+      console.error('[VoucherDetailsScreen] Update usage failed:', error);
+      const message = error instanceof Error ? translateKnownMessage(error.message, language) : copy.common.updateFailedTitle;
+      Alert.alert(copy.common.updateFailedTitle, message);
+    }
+  }
+
+  function handleDelete() {
     if (!voucher) {
       return;
     }
 
-    Alert.alert('Delete voucher', 'This action cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await deleteMutation.mutateAsync({ voucherId: voucher.id });
-            navigation.goBack();
-          } catch {
-            Alert.alert('Delete failed', 'We could not delete this voucher. Please try again.');
-          }
-        },
-      },
-    ]);
+    setConfirmActionType('delete');
+  }
+
+  async function handleConfirmAction() {
+    if (!voucher || !confirmActionType) {
+      return;
+    }
+
+    if (confirmActionType === 'markRedeemed') {
+      try {
+        await markRedeemedMutation.mutateAsync({ voucherId: voucher.id });
+        setConfirmActionType(null);
+        Alert.alert(copy.common.updatedTitle, copy.voucherDetails.markRedeemedMessage);
+      } catch (error) {
+        console.error('[VoucherDetailsScreen] Mark redeemed failed:', error);
+        const message = error instanceof Error ? translateKnownMessage(error.message, language) : copy.common.updateFailedTitle;
+        Alert.alert(copy.common.updateFailedTitle, message);
+      }
+
+      return;
+    }
+
+    try {
+      await deleteMutation.mutateAsync({ voucherId: voucher.id });
+      setConfirmActionType(null);
+      navigation.goBack();
+    } catch (error) {
+      console.error('[VoucherDetailsScreen] Delete voucher failed:', error);
+      const message = error instanceof Error ? translateKnownMessage(error.message, language) : copy.common.deleteFailedTitle;
+      Alert.alert(copy.common.deleteFailedTitle, message);
+    }
   }
 
   return (
     <ScreenContainer>
-      {voucherQuery.isLoading ? <ActivityIndicator color="#1f5f4d" /> : null}
-      {voucherQuery.error ? <Text style={styles.errorText}>Unable to load voucher details right now.</Text> : null}
+      {voucherQuery.isLoading ? <ActivityIndicator color={premiumTheme.colors.accent} /> : null}
+      {voucherQuery.error ? <Text style={styles.errorText}>{copy.voucherDetails.unableToLoadDetails}</Text> : null}
 
-      {!voucherQuery.isLoading && !voucher ? <EmptyState title="Voucher not found" message="The requested voucher is not available in the current wallet context." /> : null}
+      {!voucherQuery.isLoading && !voucher ? <EmptyState title={copy.voucherDetails.notFoundTitle} message={copy.voucherDetails.notFoundMessage} /> : null}
 
       {voucher ? (
         <>
-          <SectionCard title={voucher.title} subtitle={voucher.merchantName || 'No merchant name provided'}>
-            <View style={styles.row}>
-              <Text style={styles.label}>Expiry</Text>
-              <Text style={styles.value}>{formatDateLabel(voucher.expiryDate)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Purchase date</Text>
-              <Text style={styles.value}>{formatDateLabel(voucher.purchaseDate)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Category</Text>
-              <Text style={styles.value}>{voucher.category || 'Not set'}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Currency</Text>
-              <Text style={styles.value}>{voucher.currency}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Face value</Text>
-              <Text style={styles.value}>{formatCurrency(voucher.faceValue, voucher.currency)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Paid value</Text>
-              <Text style={styles.value}>{formatCurrency(voucher.paidValue, voucher.currency)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Code</Text>
-              <Text style={styles.value}>{voucher.code || 'None'}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Status</Text>
-              <Text style={styles.value}>{voucher.status}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Redeemed at</Text>
-              <Text style={styles.value}>{formatDateLabel(voucher.redeemedAt)}</Text>
-            </View>
-            <View style={styles.stackRow}>
-              <Text style={styles.label}>Notes</Text>
-              <Text style={styles.notesText}>{voucher.notes || 'No notes yet.'}</Text>
+          <SectionCard
+            title={voucher.voucherType === 'product' ? voucher.productName || voucher.title : voucher.merchantName || voucher.title}
+          >
+            <View style={styles.detailsBox}>
+              <View style={[styles.row, isRtl ? styles.rowReverse : null]}>
+                <Text style={[styles.label, isRtl ? styles.textRtl : null]}>{copy.voucherDetails.category}</Text>
+                <Text style={[styles.value, isRtl ? styles.valueRtl : null]}>{voucher.category ? getCategoryLabel(voucher.category, language) : copy.common.other}</Text>
+              </View>
+              <View style={[styles.row, isRtl ? styles.rowReverse : null]}>
+                <Text style={[styles.label, isRtl ? styles.textRtl : null]}>{copy.voucherDetails.expiry}</Text>
+                <Text style={[styles.value, isRtl ? styles.valueRtl : null]}>{formatDateLabel(voucher.expiryDate, { locale, missingLabel: copy.common.notSet })}</Text>
+              </View>
+              {voucher.voucherType === 'monetary' ? (
+                <>
+                  <View style={[styles.row, isRtl ? styles.rowReverse : null]}>
+                    <Text style={[styles.label, isRtl ? styles.textRtl : null]}>{copy.voucherDetails.merchant}</Text>
+                    <Text style={[styles.value, isRtl ? styles.valueRtl : null]}>{voucher.merchantName || copy.common.notSet}</Text>
+                  </View>
+                  <View style={[styles.row, isRtl ? styles.rowReverse : null]}>
+                    <Text style={[styles.label, isRtl ? styles.textRtl : null]}>{copy.voucherDetails.totalValue}</Text>
+                    <Text style={[styles.value, isRtl ? styles.valueRtl : null]}>{formatCurrency(voucher.faceValue, voucher.currency, { locale, missingLabel: copy.common.noValue })}</Text>
+                  </View>
+                  <View style={[styles.row, isRtl ? styles.rowReverse : null]}>
+                    <Text style={[styles.label, isRtl ? styles.textRtl : null]}>{copy.voucherDetails.usedValue}</Text>
+                    <Text style={[styles.value, isRtl ? styles.valueRtl : null]}>{formatCurrency(voucher.usedValue, voucher.currency, { locale, missingLabel: copy.common.noValue })}</Text>
+                  </View>
+                  <View style={[styles.row, isRtl ? styles.rowReverse : null]}>
+                    <Text style={[styles.label, isRtl ? styles.textRtl : null]}>{copy.voucherDetails.remainingValue}</Text>
+                    <Text style={[styles.value, isRtl ? styles.valueRtl : null]}>{formatCurrency(voucher.remainingValue, voucher.currency, { locale, missingLabel: copy.common.noValue })}</Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <View style={[styles.row, isRtl ? styles.rowReverse : null]}>
+                    <Text style={[styles.label, isRtl ? styles.textRtl : null]}>{copy.voucherDetails.product}</Text>
+                    <Text style={[styles.value, isRtl ? styles.valueRtl : null]}>{voucher.productName || voucher.title}</Text>
+                  </View>
+                  <View style={[styles.row, isRtl ? styles.rowReverse : null]}>
+                    <Text style={[styles.label, isRtl ? styles.textRtl : null]}>{copy.voucherDetails.merchant}</Text>
+                    <Text style={[styles.value, isRtl ? styles.valueRtl : null]}>{voucher.merchantName || copy.common.notSet}</Text>
+                  </View>
+                </>
+              )}
+              <View style={[styles.row, isRtl ? styles.rowReverse : null]}>
+                <Text style={[styles.label, isRtl ? styles.textRtl : null]}>{copy.voucherDetails.code}</Text>
+                <Text style={[styles.value, isRtl ? styles.valueRtl : null]}>{voucher.code || copy.common.none}</Text>
+              </View>
+              <View style={[styles.row, isRtl ? styles.rowReverse : null]}>
+                <Text style={[styles.label, isRtl ? styles.textRtl : null]}>{copy.voucherDetails.status}</Text>
+                <Text style={[styles.value, isRtl ? styles.valueRtl : null]}>{getVoucherStatusLabel(voucher.status, language)}</Text>
+              </View>
+              <View style={[styles.row, isRtl ? styles.rowReverse : null]}>
+                <Text style={[styles.label, isRtl ? styles.textRtl : null]}>{copy.voucherDetails.redeemedAt}</Text>
+                <Text style={[styles.value, isRtl ? styles.valueRtl : null]}>{formatDateLabel(voucher.redeemedAt, { locale, missingLabel: copy.common.notSet })}</Text>
+              </View>
+              <View style={[styles.rowStack, isRtl ? styles.rowStackRtl : null]}>
+                <Text style={[styles.label, isRtl ? styles.textRtl : null]}>{copy.voucherDetails.notes}</Text>
+                <Text style={[styles.notesText, isRtl ? styles.textRtl : null]}>{voucher.notes || copy.common.noNotesYet}</Text>
+              </View>
             </View>
             <Pressable style={styles.primaryButton} onPress={() => navigation.navigate('VoucherForm', { voucherId: voucher.id })}>
-              <Text style={styles.primaryButtonText}>Edit voucher</Text>
+              <Text style={styles.primaryButtonText}>{copy.voucherDetails.editVoucher}</Text>
             </Pressable>
-            {voucher.status !== 'redeemed' ? (
+            {voucher.voucherType === 'product' && voucher.status !== 'redeemed' ? (
               <Pressable style={styles.secondaryButton} onPress={handleMarkRedeemed} disabled={markRedeemedMutation.isPending}>
-                <Text style={styles.secondaryButtonText}>{markRedeemedMutation.isPending ? 'Updating...' : 'Mark as redeemed'}</Text>
+                <Text style={styles.secondaryButtonText}>{markRedeemedMutation.isPending ? copy.common.updating : copy.voucherDetails.markAsRedeemed}</Text>
+              </Pressable>
+            ) : null}
+            {voucher.voucherType === 'monetary' && voucher.status !== 'redeemed' ? (
+              <Pressable style={styles.secondaryButton} onPress={openUsageModal} disabled={addUsageMutation.isPending}>
+                <Text style={styles.secondaryButtonText}>{addUsageMutation.isPending ? copy.common.updating : copy.voucherDetails.updateUsage}</Text>
               </Pressable>
             ) : null}
             <Pressable style={styles.deleteButton} onPress={handleDelete} disabled={deleteMutation.isPending}>
-              <Text style={styles.deleteButtonText}>{deleteMutation.isPending ? 'Deleting...' : 'Delete voucher'}</Text>
+              <Text style={styles.deleteButtonText}>{deleteMutation.isPending ? copy.common.deleting : copy.voucherDetails.deleteVoucher}</Text>
             </Pressable>
-          </SectionCard>
 
-          <SectionCard title="Attachments" subtitle="Attachment metadata is modeled separately so private storage and signed URL access can evolve without changing voucher rows.">
             {voucher.attachments.length === 0 ? (
-              <Text style={styles.notesText}>No attachment records are attached to this voucher yet.</Text>
+              <Text style={[styles.notesText, isRtl ? styles.textRtl : null]}>{copy.voucherDetails.noAttachments}</Text>
             ) : (
-              voucher.attachments.map((attachment) => (
-                <Pressable key={attachment.id} style={styles.attachmentRow} onPress={() => handleOpenAttachment(attachment.id)}>
-                  <Text style={styles.value}>{attachment.fileName ?? attachment.storagePath}</Text>
-                  <Text style={styles.attachmentMeta}>Open</Text>
-                </Pressable>
-              ))
+              <>
+                {voucher.attachments.map((attachment) => (
+                  <Pressable key={attachment.id} style={[styles.attachmentRow, isRtl ? styles.rowReverse : null]} onPress={() => handleOpenAttachment(attachment.id)}>
+                    <Text style={[styles.value, isRtl ? styles.valueRtl : null]}>{attachment.fileName ?? attachment.storagePath}</Text>
+                    <Text style={[styles.attachmentMeta, isRtl ? styles.textRtl : null]}>{copy.voucherDetails.openAttachment}</Text>
+                  </Pressable>
+                ))}
+              </>
             )}
             {attachmentError ? <Text style={styles.errorText}>{attachmentError}</Text> : null}
           </SectionCard>
+
+          <Modal visible={confirmActionType !== null} transparent animationType="fade" onRequestClose={closeConfirmModal}>
+            <View style={styles.modalBackdrop}>
+              <View style={styles.modalCard}>
+                <Text style={[styles.modalTitle, isRtl ? styles.textRtl : null]}>{confirmConfig?.title}</Text>
+                <Text style={[styles.modalSubtitle, isRtl ? styles.textRtl : null]}>{confirmConfig?.message}</Text>
+                <View style={[styles.modalActions, isRtl ? styles.rowReverse : null]}>
+                  <Pressable style={styles.modalCancelButton} onPress={closeConfirmModal} disabled={isConfirmPending}>
+                    <Text style={styles.modalCancelText}>{copy.common.cancel}</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.modalConfirmButton, confirmConfig?.destructive ? styles.modalConfirmButtonDestructive : null]}
+                    onPress={handleConfirmAction}
+                    disabled={isConfirmPending}
+                  >
+                    <Text style={styles.modalConfirmText}>{confirmConfig?.confirmLabel}</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          </Modal>
+
+          <Modal visible={isUsageModalVisible} transparent animationType="fade" onRequestClose={closeUsageModal}>
+            <View style={styles.modalBackdrop}>
+              <View style={styles.modalCard}>
+                <Text style={[styles.modalTitle, isRtl ? styles.textRtl : null]}>{copy.voucherDetails.updateUsageModalTitle}</Text>
+                <Text style={[styles.modalSubtitle, isRtl ? styles.textRtl : null]}>{copy.voucherDetails.updateUsageModalMessage}</Text>
+                <TextInput
+                  value={usageAmountInput}
+                  onChangeText={setUsageAmountInput}
+                  keyboardType="decimal-pad"
+                  placeholder="0.00"
+                  style={[styles.amountInput, isRtl ? styles.amountInputRtl : null]}
+                  editable={!addUsageMutation.isPending}
+                />
+                <View style={[styles.modalActions, isRtl ? styles.rowReverse : null]}>
+                  <Pressable style={styles.modalCancelButton} onPress={closeUsageModal} disabled={addUsageMutation.isPending}>
+                    <Text style={styles.modalCancelText}>{copy.common.cancel}</Text>
+                  </Pressable>
+                  <Pressable style={styles.modalConfirmButton} onPress={handleSubmitUsageUpdate} disabled={addUsageMutation.isPending}>
+                    <Text style={styles.modalConfirmText}>{addUsageMutation.isPending ? copy.common.saving : copy.common.save}</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          </Modal>
         </>
       ) : null}
     </ScreenContainer>
@@ -172,76 +327,193 @@ export function VoucherDetailsScreen({ navigation, route }: Props) {
 }
 
 const styles = StyleSheet.create({
+  rowReverse: {
+    flexDirection: 'row-reverse',
+  },
+  textRtl: {
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  detailsBox: {
+    borderRadius: premiumTheme.radius.lg,
+    borderWidth: 1,
+    borderColor: premiumTheme.colors.border,
+    backgroundColor: premiumTheme.colors.surfaceStrong,
+    overflow: 'hidden',
+  },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 12,
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: premiumTheme.colors.border,
   },
-  stackRow: {
-    gap: 6,
+  rowStack: {
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
   },
   label: {
     fontSize: 14,
-    color: '#556760',
-    fontWeight: '600',
+    color: premiumTheme.colors.mutedStrong,
+    fontWeight: '700',
   },
   value: {
     fontSize: 15,
-    color: '#18231e',
-    fontWeight: '600',
+    color: premiumTheme.colors.text,
+    fontWeight: '700',
     flexShrink: 1,
     textAlign: 'right',
+  },
+  valueRtl: {
+    textAlign: 'left',
   },
   notesText: {
     fontSize: 14,
     lineHeight: 20,
-    color: '#3b4a45',
+    color: premiumTheme.colors.muted,
+  },
+  rowStackRtl: {
+    alignItems: 'flex-end',
   },
   attachmentRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 12,
-    paddingVertical: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: premiumTheme.radius.md,
+    backgroundColor: premiumTheme.colors.surfaceStrong,
+    borderWidth: 1,
+    borderColor: premiumTheme.colors.border,
   },
   attachmentMeta: {
     fontSize: 12,
-    color: '#1f5f4d',
-    fontWeight: '700',
+    color: premiumTheme.colors.accent,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
   },
   primaryButton: {
     minHeight: 48,
-    borderRadius: 14,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1f5f4d',
+    backgroundColor: premiumTheme.colors.accent,
+    borderWidth: 1,
+    borderColor: premiumTheme.colors.accentStrong,
+    shadowColor: premiumTheme.colors.shadowStrong,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 4,
   },
   primaryButtonText: {
-    color: '#ffffff',
-    fontWeight: '700',
+    color: premiumTheme.colors.surfaceStrong,
+    fontWeight: '800',
   },
   secondaryButton: {
     minHeight: 46,
-    borderRadius: 12,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#e7efeb',
+    backgroundColor: premiumTheme.colors.surfaceTint,
+    borderWidth: 1,
+    borderColor: premiumTheme.colors.border,
   },
   secondaryButtonText: {
-    color: '#173029',
-    fontWeight: '700',
+    color: premiumTheme.colors.mutedStrong,
+    fontWeight: '800',
   },
   deleteButton: {
     minHeight: 46,
-    borderRadius: 12,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f5e5e5',
+    backgroundColor: premiumTheme.colors.dangerSoft,
+    borderWidth: 1,
+    borderColor: '#e5c8c9',
   },
   deleteButtonText: {
-    color: '#8a1f1f',
-    fontWeight: '700',
+    color: premiumTheme.colors.danger,
+    fontWeight: '800',
   },
   errorText: {
-    color: '#b94b4b',
+    color: premiumTheme.colors.danger,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(21, 27, 42, 0.48)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    width: '100%',
+    borderRadius: premiumTheme.radius.xl,
+    backgroundColor: premiumTheme.colors.surface,
+    padding: 18,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: premiumTheme.colors.border,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: premiumTheme.colors.text,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: premiumTheme.colors.muted,
+  },
+  amountInput: {
+    borderWidth: 1,
+    borderColor: premiumTheme.colors.border,
+    borderRadius: 12,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    fontSize: 16,
+    color: premiumTheme.colors.text,
+    backgroundColor: premiumTheme.colors.surfaceStrong,
+  },
+  amountInputRtl: {
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+  },
+  modalCancelButton: {
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: premiumTheme.colors.surfaceTint,
+    borderWidth: 1,
+    borderColor: premiumTheme.colors.border,
+  },
+  modalCancelText: {
+    color: premiumTheme.colors.mutedStrong,
+    fontWeight: '800',
+  },
+  modalConfirmButton: {
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: premiumTheme.colors.accent,
+    borderWidth: 1,
+    borderColor: premiumTheme.colors.accentStrong,
+  },
+  modalConfirmButtonDestructive: {
+    backgroundColor: premiumTheme.colors.danger,
+    borderColor: '#a23f42',
+  },
+  modalConfirmText: {
+    color: premiumTheme.colors.surfaceStrong,
+    fontWeight: '800',
   },
 });

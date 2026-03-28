@@ -75,9 +75,9 @@ function isAuthorized(req: Request): boolean {
  * Fetches all active, non-expired vouchers with the wallet owner's reminder
  * offsets via the get_active_vouchers_for_reminders() SQL helper.
  *
- * Date semantics: expiry_date is a date-only column evaluated in UTC by
- * Postgres. days_until_expiry is computed by the DB as
- * (expiry_date - CURRENT_DATE) and is always >= 0 (expired rows are excluded).
+ * Date semantics: expiry_date is a date-only column and days_until_expiry is
+ * computed against the wallet owner's local calendar date inside Postgres.
+ * The SQL helper uses the owner's profile.timezone with a UTC fallback.
  *
  * Extension point: per-voucher offset overrides are transparent to this call —
  * they are resolved inside the SQL function, not here.

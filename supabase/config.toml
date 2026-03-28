@@ -29,7 +29,6 @@ enabled = true
 
 [auth]
 enabled = true
-port = 54327
 site_url = "http://localhost:3000"
 additional_redirect_urls = ["https://localhost:3000"]
 jwt_expiry = 3600
@@ -39,12 +38,14 @@ refresh_token_reuse_interval = 10
 enable_anonymous_sign_ins = false
 
 [functions]
-# Points all Edge Functions at a shared import map for consistent dependency versions.
-# Individual functions can override with their own import_map.json if needed.
-import_map = "./functions/import_map.json"
 
 [functions.process-reminders]
 # We handle authorization ourselves via PROCESS_REMINDERS_SECRET.
 # Setting verify_jwt = false means Supabase will not require a valid user JWT,
 # which is correct since this function is called by the cron system, not a user.
 verify_jwt = false
+import_map = "./functions/import_map.json"
+
+[functions.extract-voucher-draft]
+verify_jwt = false
+import_map = "./functions/import_map.json"

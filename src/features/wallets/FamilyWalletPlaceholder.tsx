@@ -1,5 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 
+import { premiumTheme } from '../../theme/premium';
+
 export function FamilyWalletPlaceholder() {
   return (
     <View style={styles.container}>
@@ -13,21 +15,21 @@ export function FamilyWalletPlaceholder() {
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 18,
-    padding: 16,
-    backgroundColor: '#e8f1ed',
+    borderRadius: premiumTheme.radius.xl,
+    padding: premiumTheme.spacing.lg,
+    backgroundColor: premiumTheme.colors.surfaceTint,
     borderWidth: 1,
-    borderColor: '#c5d7d0',
-    gap: 8,
+    borderColor: premiumTheme.colors.border,
+    gap: 10,
   },
   title: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#1f302a',
+    fontWeight: '800',
+    color: premiumTheme.colors.text,
   },
   message: {
     fontSize: 14,
     lineHeight: 20,
-    color: '#4c6058',
+    color: premiumTheme.colors.muted,
   },
 });

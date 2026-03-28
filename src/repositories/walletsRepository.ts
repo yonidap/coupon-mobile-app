@@ -67,6 +67,7 @@ export const walletsRepository = {
       .select('*')
       .eq('owner_user_id', userId)
       .eq('type', 'personal')
+      .order('created_at', { ascending: true })
       .limit(1)
       .maybeSingle();
 

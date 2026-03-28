@@ -6,12 +6,16 @@ import { FormTextField } from '../components/FormTextField';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { SectionCard } from '../components/SectionCard';
 import { registerSchema } from '../features/auth/authSchemas';
+import { useAppLanguage } from '../hooks/useAppLanguage';
+import { translateKnownMessage } from '../i18n/translations';
 import { authService } from '../services/authService';
 import type { RootStackParamList } from '../navigation/types';
+import { premiumTheme } from '../theme/premium';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Register'>;
 
 export function RegisterScreen({ navigation }: Props) {
+  const { copy, language, isRtl } = useAppLanguage();
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -20,24 +24,41 @@ export function RegisterScreen({ navigation }: Props) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   function mapRegisterError(nextError: unknown): string {
-    const message = nextError instanceof Error ? nextError.message.toLowerCase() : '';
+    const rawMessage = nextError instanceof Error ? nextError.message : '';
+    const message = rawMessage.toLowerCase();
 
     if (message.includes('already registered')) {
-      return 'This email is already registered. Try signing in instead.';
+      return copy.auth.alreadyRegistered;
     }
 
     if (message.includes('wallet')) {
-      return 'Account created, but personal wallet setup is incomplete. Please sign out and sign in again.';
+      return copy.auth.accountCreatedButWalletIncomplete;
     }
 
-    return 'Unable to create account right now. Please try again.';
+    if (message.includes('invalid api key') || message.includes('apikey') || message.includes('jwt malformed')) {
+      return copy.auth.supabaseCredentialsInvalid;
+    }
+
+    if (message.includes('network request failed') || message.includes('failed to fetch') || message.includes('fetch')) {
+      return copy.auth.couldNotReachAuthServer;
+    }
+
+    if (message.includes('supabase environment variables are missing')) {
+      return copy.auth.supabaseEnvMissing;
+    }
+
+    if (rawMessage) {
+      return `${copy.auth.unableToCreateAccountPrefix} ${translateKnownMessage(rawMessage, language)}`;
+    }
+
+    return copy.auth.unableToCreateAccount;
   }
 
   async function handleRegister() {
     const parsed = registerSchema.safeParse({ displayName, email, password });
 
     if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? 'Check your details and try again.');
+      setError(translateKnownMessage(parsed.error.issues[0]?.message ?? copy.auth.invalidRegistrationDetails, language));
       return;
     }
 
@@ -48,9 +69,10 @@ export function RegisterScreen({ navigation }: Props) {
       const session = await authService.signUp(parsed.data);
 
       if (!session) {
-        setMessage('Account created. If email confirmation is enabled in Supabase, confirm your email before signing in.');
+        setMessage(copy.auth.accountCreated);
       }
     } catch (nextError) {
+      console.error('[RegisterScreen] Sign up failed:', nextError);
       setError(mapRegisterError(nextError));
     } finally {
       setIsSubmitting(false);
@@ -59,10 +81,10 @@ export function RegisterScreen({ navigation }: Props) {
 
   return (
     <ScreenContainer>
-      <SectionCard title="Create account" subtitle="Personal wallet first. Shared/family wallet support is prepared behind the scenes.">
-        <FormTextField label="Display name" value={displayName} onChangeText={setDisplayName} placeholder="Optional" />
+      <SectionCard>
+        <FormTextField label={copy.auth.displayName} value={displayName} onChangeText={setDisplayName} placeholder={copy.auth.optional} />
         <FormTextField
-          label="Email"
+          label={copy.auth.email}
           value={email}
           onChangeText={setEmail}
           placeholder="you@example.com"
@@ -70,24 +92,24 @@ export function RegisterScreen({ navigation }: Props) {
           keyboardType="email-address"
         />
         <FormTextField
-          label="Password"
+          label={copy.auth.password}
           value={password}
           onChangeText={setPassword}
-          placeholder="Minimum 6 characters"
+          placeholder={copy.auth.minimumPassword}
           autoCapitalize="none"
           secureTextEntry
         />
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-        {message ? <Text style={styles.messageText}>{message}</Text> : null}
+        {error ? <Text style={[styles.errorText, isRtl ? styles.textRtl : null]}>{error}</Text> : null}
+        {message ? <Text style={[styles.messageText, isRtl ? styles.textRtl : null]}>{message}</Text> : null}
         <Pressable style={styles.primaryButton} onPress={handleRegister} disabled={isSubmitting}>
-          {isSubmitting ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.primaryButtonText}>Create account</Text>}
+          {isSubmitting ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.primaryButtonText}>{copy.auth.createAccount}</Text>}
         </Pressable>
       </SectionCard>
 
-      <View style={styles.secondaryActions}>
-        <Text style={styles.secondaryText}>Already have an account?</Text>
+      <View style={[styles.secondaryActions, isRtl ? styles.rowReverse : null]}>
+        <Text style={[styles.secondaryText, isRtl ? styles.textRtl : null]}>{copy.auth.alreadyHaveAccount}</Text>
         <Pressable onPress={() => navigation.navigate('Login')}>
-          <Text style={styles.linkText}>Sign in</Text>
+          <Text style={styles.linkText}>{copy.auth.signInLink}</Text>
         </Pressable>
       </View>
     </ScreenContainer>
@@ -95,37 +117,51 @@ export function RegisterScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
+  rowReverse: {
+    flexDirection: 'row-reverse',
+  },
+  textRtl: {
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
   errorText: {
-    color: '#b94b4b',
+    color: premiumTheme.colors.danger,
     fontSize: 14,
   },
   messageText: {
-    color: '#1f5f4d',
+    color: premiumTheme.colors.accentStrong,
     fontSize: 14,
     lineHeight: 20,
   },
   primaryButton: {
     minHeight: 50,
-    borderRadius: 14,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1f5f4d',
+    backgroundColor: premiumTheme.colors.accent,
+    borderWidth: 1,
+    borderColor: premiumTheme.colors.accentStrong,
+    shadowColor: premiumTheme.colors.shadowStrong,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 4,
   },
   primaryButtonText: {
-    color: '#ffffff',
+    color: premiumTheme.colors.surfaceStrong,
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   secondaryActions: {
     flexDirection: 'row',
-    gap: 6,
+    gap: 8,
     justifyContent: 'center',
   },
   secondaryText: {
-    color: '#556760',
+    color: premiumTheme.colors.muted,
   },
   linkText: {
-    color: '#1f5f4d',
-    fontWeight: '700',
+    color: premiumTheme.colors.accent,
+    fontWeight: '800',
   },
 });

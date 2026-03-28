@@ -148,12 +148,12 @@ The concurrent-execution risk above is mitigated by scheduling the cron to run a
 ## Date and timezone semantics
 
 - `vouchers.expiry_date` is a `DATE` column with no time component.
-- `CURRENT_DATE` in Postgres evaluates to the current date **in UTC**.
-- Edge Functions run in UTC.
-- `days_until_expiry = expiry_date - CURRENT_DATE` is always an integer number of days.
-- A voucher expiring on `2026-04-10` with offset `7` fires when `CURRENT_DATE = 2026-04-03`.
+- Reminder math uses the wallet owner's profile timezone.
+- The SQL helper computes `owner_today` as `now() at time zone profiles.timezone`.
+- `days_until_expiry = expiry_date - owner_today` is always an integer number of days.
+- A voucher expiring on `2026-04-10` with offset `7` fires when `owner_today = 2026-04-03`.
 
-**If per-timezone delivery is needed in the future:** add a `timezone text` column to `profiles`, compute the user's local date in the SQL function using `(now() AT TIME ZONE p.timezone)::date`, and replace `CURRENT_DATE` in the helper function.
+**Timezone rule:** the wallet owner's timezone is the source of truth. For personal wallets, that is the current user's timezone. The app captures the device IANA timezone and stores it on `profiles.timezone`; if the value is missing, the server falls back to `UTC`.
 
 ---
 
@@ -162,7 +162,7 @@ The concurrent-execution risk above is mitigated by scheduling the cron to run a
 1. **Personal wallets only** — a wallet has one active member (the owner). The recipient resolution query already handles multiple members, so family/shared wallets work without code changes.
 2. **Push channel only** — the `channel` column exists for forward-compatibility; only `'push'` is implemented.
 3. **One reminder per (voucher, offset) regardless of number of members** — a single `voucher_reminders` row tracks delivery for the whole wallet. If per-member tracking is needed later, the unique key changes to `(voucher_id, offset_days, channel, user_id)`.
-4. **Profile-level offsets only** — every voucher in a wallet uses the wallet owner's `default_reminder_offsets`.
+4. **Profile-level offsets only** — every voucher in a wallet uses the wallet owner's `default_reminder_offsets`, evaluated against the wallet owner's timezone.
 5. **No receipt checking** — Expo tickets with `status='ok'` are trusted as successful. Receipt checking (confirming APNs/FCM delivery) is deferred.
 
 ---

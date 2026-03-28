@@ -13,9 +13,9 @@ export interface ActiveVoucherRow {
   id: string;
   wallet_id: string;
   title: string;
-  /** 'YYYY-MM-DD' — a date-only string, no time component. All math is in UTC. */
+  /** 'YYYY-MM-DD' — a date-only string, no time component. Math is based on the wallet owner's local calendar date. */
   expiry_date: string;
-  /** (expiry_date - CURRENT_DATE), always >= 0 because the SQL filters expired rows. */
+  /** (expiry_date - owner_local_date), always >= 0 because the SQL filters expired rows. */
   days_until_expiry: number;
   /** Reminder offsets in days-before-expiry from the wallet owner's profile. */
   owner_reminder_offsets: number[];
