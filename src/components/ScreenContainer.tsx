@@ -23,7 +23,7 @@ type ScreenContainerProps = {
 export function ScreenContainer({ children, scrollable = true, contentContainerStyle, refreshControl }: ScreenContainerProps) {
   if (scrollable) {
     return (
-      <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
         <View pointerEvents="none" style={styles.backgroundLayer}>
           <View style={styles.topGlow} />
           <View style={styles.bottomGlow} />
@@ -39,7 +39,7 @@ export function ScreenContainer({ children, scrollable = true, contentContainerS
   }
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <View pointerEvents="none" style={styles.backgroundLayer}>
         <View style={styles.topGlow} />
         <View style={styles.bottomGlow} />

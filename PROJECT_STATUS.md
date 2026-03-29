@@ -10,6 +10,18 @@
 - Voucher form Zod schemas and attachment picker scaffolding for image/PDF selection.
 - Placeholder family wallet module and future-ready wallet role types.
 - Fallback repository behavior when Supabase business tables are not created yet.
+- Focused iPhone-friendly PWA shell for web usage (manifest, install icons, Apple home-screen metadata, standalone launch mode, and minimal service worker shell caching).
+
+## iPhone PWA Usage
+
+- The web app can now be added to an iPhone home screen and launched in an app-like standalone window.
+- How to add it:
+  1. Open the deployed web URL in Safari on iPhone.
+  2. Tap `Share`.
+  3. Tap `Add to Home Screen`, then tap `Add`.
+- Current limitations vs native:
+  - Offline support is intentionally minimal (cached app shell + static assets only); live voucher/auth data still depends on network access.
+  - Native-only capabilities (for example full background execution and native push UX parity) remain limited in Safari PWA mode.
 
 ## Scaffold Only
 

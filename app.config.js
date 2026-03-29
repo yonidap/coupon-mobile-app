@@ -1,4 +1,7 @@
 const appName = 'Coupon Wallet';
+const appShortName = 'Coupons';
+const appThemeColor = '#8a6427';
+const appBackgroundColor = '#f5efe6';
 
 module.exports = {
   expo: {
@@ -7,6 +10,7 @@ module.exports = {
     version: '1.0.0',
     orientation: 'portrait',
     icon: './assets/icon.png',
+    backgroundColor: appBackgroundColor,
     userInterfaceStyle: 'light',
     splash: {
       image: './assets/splash-icon.png',
@@ -27,6 +31,17 @@ module.exports = {
       predictiveBackGestureEnabled: false,
     },
     web: {
+      name: appName,
+      shortName: appShortName,
+      lang: 'en',
+      scope: '/',
+      startUrl: '/',
+      display: 'standalone',
+      orientation: 'portrait',
+      themeColor: appThemeColor,
+      backgroundColor: appBackgroundColor,
+      barStyle: 'default',
+      description: 'Track coupons and vouchers in one place.',
       favicon: './assets/favicon.png',
     },
     extra: {
