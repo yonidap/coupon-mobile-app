@@ -9,12 +9,13 @@ import { premiumTheme } from '../theme/premium';
 type TopBarMenuProps = {
   currentLanguage: SupportedLanguage;
   onLanguageChange: (language: SupportedLanguage) => Promise<void> | void;
+  onHome: () => void;
   onSettings: () => void;
   onSignOut: () => Promise<void> | void;
   showSettings?: boolean;
 };
 
-export function TopBarMenu({ currentLanguage, onLanguageChange, onSettings, onSignOut, showSettings = true }: TopBarMenuProps) {
+export function TopBarMenu({ currentLanguage, onLanguageChange, onHome, onSettings, onSignOut, showSettings = true }: TopBarMenuProps) {
   const [isVisible, setVisible] = useState(false);
   const [isMounted, setMounted] = useState(false);
   const [isSavingLanguage, setSavingLanguage] = useState(false);
@@ -127,6 +128,15 @@ export function TopBarMenu({ currentLanguage, onLanguageChange, onSettings, onSi
             ]}
           >
             <View style={styles.grip} />
+            <Pressable
+              style={styles.item}
+              onPress={() => {
+                closeMenu();
+                onHome();
+              }}
+            >
+              <Text style={[styles.itemText, isRtl ? styles.itemTextRtl : null]}>{copy.menu.overview}</Text>
+            </Pressable>
             {showSettings ? (
               <Pressable
                 style={styles.item}

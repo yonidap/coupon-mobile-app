@@ -8,12 +8,13 @@ import { FormTextField } from '../components/FormTextField';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { SectionCard } from '../components/SectionCard';
 import { voucherCategories } from '../features/vouchers/categories';
+import { duplicateVoucherCodeErrorMessage } from '../features/vouchers/errors';
 import { createVoucherFormDefaults, mapVoucherToFormValues } from '../features/vouchers/formDefaults';
 import { voucherCreateSchema, type VoucherFormValues } from '../features/vouchers/schemas';
 import { useAppLanguage } from '../hooks/useAppLanguage';
+import { useVoucherList, useExtractVoucherDraftMutation, useSaveVoucherMutation, useVoucherDetails } from '../hooks/useVoucherQueries';
 import { getCategoryLabel, translateKnownMessage } from '../i18n/translations';
 import { useAuthSession } from '../hooks/useAuthSession';
-import { useExtractVoucherDraftMutation, useSaveVoucherMutation, useVoucherDetails } from '../hooks/useVoucherQueries';
 import type { RootStackParamList } from '../navigation/types';
 import { attachmentService } from '../services/attachmentService';
 import type { VoucherDraftSuggestion } from '../types/domain';
@@ -30,6 +31,7 @@ export function VoucherFormScreen({ navigation, route }: Props) {
   const autoPickAttachment = route.params?.autoPickAttachment ?? false;
   const shouldExtractOnAttachment = Boolean(voucherId) || createMode === 'upload';
   const voucherQuery = useVoucherDetails(user?.id, voucherId);
+  const vouchersQuery = useVoucherList(user?.id);
   const saveMutation = useSaveVoucherMutation(user?.id);
   const extractDraftMutation = useExtractVoucherDraftMutation(user?.id);
   const appliedInitialTypeRef = useRef(false);
@@ -44,6 +46,8 @@ export function VoucherFormScreen({ navigation, route }: Props) {
     handleSubmit,
     formState: { errors },
     reset,
+    setError,
+    clearErrors,
     setValue,
     getValues,
     watch,
@@ -92,6 +96,26 @@ export function VoucherFormScreen({ navigation, route }: Props) {
 
   function toFormAmount(value: number): string {
     return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, '');
+  }
+
+  function normalizeCode(value: string): string {
+    return value.trim().toLowerCase();
+  }
+
+  function hasDuplicateCode(code: string): boolean {
+    const normalizedCode = normalizeCode(code);
+
+    if (!normalizedCode || !vouchersQuery.data) {
+      return false;
+    }
+
+    return vouchersQuery.data.vouchers.some((voucher) => {
+      if (voucher.id === voucherId) {
+        return false;
+      }
+
+      return normalizeCode(voucher.code ?? '') === normalizedCode;
+    });
   }
 
   function setSuggestedValue<K extends keyof VoucherFormValues>(field: K, nextValue: VoucherFormValues[K]): boolean {
@@ -231,6 +255,14 @@ export function VoucherFormScreen({ navigation, route }: Props) {
 
   const onSubmit = handleSubmit(
     async (values) => {
+      if (hasDuplicateCode(values.code)) {
+        setError('code', {
+          type: 'duplicate',
+          message: duplicateVoucherCodeErrorMessage,
+        });
+        return;
+      }
+
       try {
         const savedVoucher = await saveMutation.mutateAsync({
           voucherId,
@@ -241,8 +273,17 @@ export function VoucherFormScreen({ navigation, route }: Props) {
         navigation.replace('VoucherDetails', { voucherId: savedVoucher.id });
       } catch (error) {
         console.error('[VoucherFormScreen] Save voucher failed:', error);
-        const message = error instanceof Error ? translateKnownMessage(error.message, language) : copy.voucherForm.unableToSaveVoucherMessage;
-        Alert.alert(copy.voucherForm.unableToSaveVoucherTitle, message);
+        const message = error instanceof Error ? error.message : '';
+
+        if (message === duplicateVoucherCodeErrorMessage) {
+          setError('code', {
+            type: 'duplicate',
+            message: duplicateVoucherCodeErrorMessage,
+          });
+          return;
+        }
+
+        Alert.alert(copy.voucherForm.unableToSaveVoucherTitle, error instanceof Error ? translateKnownMessage(error.message, language) : copy.voucherForm.unableToSaveVoucherMessage);
       }
     },
     () => {
@@ -401,7 +442,13 @@ export function VoucherFormScreen({ navigation, route }: Props) {
             <FormTextField
               label={copy.voucherForm.code}
               value={value}
-              onChangeText={onChange}
+              onChangeText={(nextValue) => {
+                if (errors.code?.type === 'duplicate') {
+                  clearErrors('code');
+                }
+
+                onChange(nextValue);
+              }}
               placeholder={copy.voucherForm.codePlaceholder}
               autoCapitalize="characters"
               error={errors.code?.message ? translateKnownMessage(errors.code.message, language) : undefined}

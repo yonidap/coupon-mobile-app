@@ -166,7 +166,7 @@ export function VoucherDetailsScreen({ navigation, route }: Props) {
     try {
       await deleteMutation.mutateAsync({ voucherId: voucher.id });
       setConfirmActionType(null);
-      navigation.goBack();
+      navigation.navigate('Home');
     } catch (error) {
       console.error('[VoucherDetailsScreen] Delete voucher failed:', error);
       const message = error instanceof Error ? translateKnownMessage(error.message, language) : copy.common.deleteFailedTitle;

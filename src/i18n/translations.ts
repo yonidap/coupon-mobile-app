@@ -1,4 +1,5 @@
 import type { SupportedLanguage } from '../features/settings/language';
+import { duplicateVoucherCodeErrorMessage } from '../features/vouchers/errors';
 import type { VoucherCategory } from '../features/vouchers/categories';
 import type { VoucherStatus, VoucherType } from '../types/domain';
 
@@ -53,6 +54,7 @@ export type AppCopy = {
     switchToHebrew: string;
   };
   menu: {
+    overview: string;
     settings: string;
     signOut: string;
     openMenu: string;
@@ -288,6 +290,7 @@ const englishCopy: AppCopy = {
     switchToHebrew: 'Switch language to Hebrew',
   },
   menu: {
+    overview: 'Overview',
     settings: 'Settings',
     signOut: 'Sign out',
     openMenu: 'Open menu',
@@ -541,6 +544,7 @@ const hebrewCopy: AppCopy = {
     switchToHebrew: 'העבר לעברית',
   },
   menu: {
+    overview: 'סקירה כללית',
     settings: 'הגדרות',
     signOut: 'התנתק',
     openMenu: 'פתח תפריט',
@@ -836,6 +840,7 @@ const hebrewMessageTranslations: Record<string, string> = {
   'Unable to sign out right now.': translations.he.settings.signOutFailedMessage,
   'Unable to save voucher.': translations.he.voucherForm.unableToSaveVoucherMessage,
   'Review the highlighted fields.': translations.he.voucherForm.reviewHighlightedFields,
+  [duplicateVoucherCodeErrorMessage]: 'כבר קיים בארנק קופון עם הקוד הזה.',
   'Enter a usage amount greater than zero.': translations.he.common.invalidAmountMessage,
   'Voucher usage was updated successfully.': translations.he.voucherDetails.usageUpdatedMessage,
   'This action cannot be undone.': translations.he.voucherDetails.deleteVoucherMessage,

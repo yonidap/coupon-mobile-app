@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { StyleProp, ViewStyle } from 'react-native';
 
@@ -15,7 +15,7 @@ import {
   getDaysLeftLabel,
   translateKnownMessage,
 } from '../i18n/translations';
-import { useAddVoucherUsageMutation, useMarkVoucherRedeemedMutation, useVoucherList } from '../hooks/useVoucherQueries';
+import { useAddVoucherUsageMutation, useDeleteVoucherMutation, useMarkVoucherRedeemedMutation, useVoucherList } from '../hooks/useVoucherQueries';
 import type { RootStackParamList } from '../navigation/types';
 import type { Voucher } from '../types/domain';
 import { formatCurrency, formatDateLabel, getDaysUntilDate } from '../utils/formatters';
@@ -55,6 +55,8 @@ type VoucherRowProps = {
   badge: VoucherBadge | null;
   isCompact: boolean;
   redeemedSummary: RedeemedSummary | null;
+  onDeletePress?: () => void;
+  deleteDisabled?: boolean;
   rowStyle?: StyleProp<ViewStyle>;
   onPress: () => void;
 };
@@ -112,8 +114,8 @@ function buildVoucherSearchText(voucher: Voucher) {
     .toLowerCase();
 }
 
-function VoucherRow({ voucher, display, action, badge, isCompact, redeemedSummary, rowStyle, onPress }: VoucherRowProps) {
-  const { isRtl } = useAppLanguage();
+function VoucherRow({ voucher, display, action, badge, isCompact, redeemedSummary, onDeletePress, deleteDisabled, rowStyle, onPress }: VoucherRowProps) {
+  const { copy, isRtl } = useAppLanguage();
   const hoverProgress = useRef(new Animated.Value(0)).current;
   const isInteractive = voucher.status === 'active';
   const [isHovered, setHovered] = useState(false);
@@ -146,6 +148,104 @@ function VoucherRow({ voucher, display, action, badge, isCompact, redeemedSummar
     : null;
   const isHighlighted = isInteractive && (isHovered || isPressed);
   const hoverStyle = isHighlighted ? (badge?.tone === 'warning' ? styles.expiringSoonRowHovered : styles.voucherRowHovered) : null;
+  const content = redeemedSummary ? (
+    <View style={[styles.redeemedSummaryRow, isRtl ? styles.rowReverse : null]}>
+      <Pressable style={styles.redeemedSummaryContent} onPress={onPress}>
+        <Text numberOfLines={1} style={[styles.redeemedSummaryLine, isRtl ? styles.textRtl : null]}>
+          <Text style={styles.voucherTitle}>{redeemedSummary.primary}</Text>
+          <Text style={styles.voucherTitleSeparator}> • </Text>
+          <Text style={styles.redeemedSummarySecondary}>{redeemedSummary.secondary}</Text>
+          <Text style={styles.voucherTitleSeparator}> • </Text>
+          <Text style={styles.voucherCategory}>{redeemedSummary.tertiary}</Text>
+        </Text>
+      </Pressable>
+      {onDeletePress ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={copy.voucherDetails.deleteVoucher}
+          style={({ pressed }) => [
+            styles.redeemedDeleteButton,
+            pressed ? styles.redeemedDeleteButtonPressed : null,
+            deleteDisabled ? styles.redeemedDeleteButtonDisabled : null,
+          ]}
+          onPress={onDeletePress}
+          disabled={deleteDisabled}
+        >
+          <Text style={styles.redeemedDeleteButtonText}>×</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  ) : (
+    <>
+      <View style={[styles.voucherHeaderRow, isRtl ? styles.rowReverse : null]}>
+        <Text numberOfLines={1} style={[styles.voucherTitleLine, isRtl ? styles.textRtl : null]}>
+          <Text style={styles.voucherTitle}>{display.title}</Text>
+          <Text style={styles.voucherTitleSeparator}> • </Text>
+          <Text style={styles.voucherCategory}>{display.category}</Text>
+        </Text>
+        {badge ? (
+          <View
+            style={[
+              styles.statusBadge,
+              badge.tone === 'warning' ? styles.statusBadgeWarning : null,
+              badge.tone === 'danger' ? styles.statusBadgeDanger : null,
+            ]}
+          >
+            <Text
+              style={[
+                styles.statusBadgeText,
+                badge.tone === 'warning' ? styles.statusBadgeTextWarning : null,
+                badge.tone === 'danger' ? styles.statusBadgeTextDanger : null,
+              ]}
+            >
+              {badge.label}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+      <View style={[styles.voucherBodyRow, isRtl ? styles.rowReverse : null]}>
+        <View style={styles.voucherMetaBlock}>
+          <Text
+            numberOfLines={1}
+            style={[styles.voucherEmphasis, display.emphasisTone === 'value' ? styles.voucherEmphasisValue : styles.voucherEmphasisText, isRtl ? styles.textRtl : null]}
+          >
+            {display.emphasis}
+          </Text>
+          {!isCompact ? (
+            <Text numberOfLines={1} style={[styles.voucherSupport, isRtl ? styles.textRtl : null]}>
+              {display.support}
+            </Text>
+          ) : null}
+          {!isCompact && display.footnote ? (
+            <Text numberOfLines={1} style={[styles.voucherFootnote, isRtl ? styles.textRtl : null]}>
+              {display.footnote}
+            </Text>
+          ) : null}
+        </View>
+        {action ? (
+          <View style={[styles.voucherActionSlot, isRtl ? styles.voucherActionSlotRtl : null]}>
+            <Pressable
+              style={[styles.compactActionButton, action.variant === 'accent' ? styles.compactActionButtonAccent : styles.compactActionButtonSoft]}
+              onPress={action.onPress}
+              disabled={action.disabled}
+            >
+              <Text style={[styles.compactActionText, isRtl ? styles.textRtl : null, action.variant === 'accent' ? styles.compactActionTextAccent : styles.compactActionTextSoft]}>
+                {action.label}
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
+      </View>
+    </>
+  );
+
+  if (redeemedSummary) {
+    return (
+      <Animated.View style={[styles.voucherRow, rowStyle, hoverStyle, animatedRowStyle]}>
+        <View style={[styles.voucherContent, styles.voucherContentCompact]}>{content}</View>
+      </Animated.View>
+    );
+  }
 
   return (
     <Animated.View style={[styles.voucherRow, rowStyle, hoverStyle, animatedRowStyle]}>
@@ -185,77 +285,7 @@ function VoucherRow({ voucher, display, action, badge, isCompact, redeemedSummar
             : undefined
         }
       >
-        {redeemedSummary ? (
-          <Text numberOfLines={1} style={[styles.redeemedSummaryLine, isRtl ? styles.textRtl : null]}>
-            <Text style={styles.voucherTitle}>{redeemedSummary.primary}</Text>
-            <Text style={styles.voucherTitleSeparator}> • </Text>
-            <Text style={styles.redeemedSummarySecondary}>{redeemedSummary.secondary}</Text>
-            <Text style={styles.voucherTitleSeparator}> • </Text>
-            <Text style={styles.voucherCategory}>{redeemedSummary.tertiary}</Text>
-          </Text>
-        ) : (
-          <>
-            <View style={[styles.voucherHeaderRow, isRtl ? styles.rowReverse : null]}>
-              <Text numberOfLines={1} style={[styles.voucherTitleLine, isRtl ? styles.textRtl : null]}>
-                <Text style={styles.voucherTitle}>{display.title}</Text>
-                <Text style={styles.voucherTitleSeparator}> • </Text>
-                <Text style={styles.voucherCategory}>{display.category}</Text>
-              </Text>
-              {badge ? (
-                <View
-                  style={[
-                    styles.statusBadge,
-                    badge.tone === 'warning' ? styles.statusBadgeWarning : null,
-                    badge.tone === 'danger' ? styles.statusBadgeDanger : null,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.statusBadgeText,
-                      badge.tone === 'warning' ? styles.statusBadgeTextWarning : null,
-                      badge.tone === 'danger' ? styles.statusBadgeTextDanger : null,
-                    ]}
-                  >
-                    {badge.label}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-            <View style={[styles.voucherBodyRow, isRtl ? styles.rowReverse : null]}>
-              <View style={styles.voucherMetaBlock}>
-                <Text
-                  numberOfLines={1}
-                  style={[styles.voucherEmphasis, display.emphasisTone === 'value' ? styles.voucherEmphasisValue : styles.voucherEmphasisText, isRtl ? styles.textRtl : null]}
-                >
-                  {display.emphasis}
-                </Text>
-                {!isCompact ? (
-                  <Text numberOfLines={1} style={[styles.voucherSupport, isRtl ? styles.textRtl : null]}>
-                    {display.support}
-                  </Text>
-                ) : null}
-                {!isCompact && display.footnote ? (
-                  <Text numberOfLines={1} style={[styles.voucherFootnote, isRtl ? styles.textRtl : null]}>
-                    {display.footnote}
-                  </Text>
-                ) : null}
-              </View>
-              {action ? (
-                <View style={[styles.voucherActionSlot, isRtl ? styles.voucherActionSlotRtl : null]}>
-                  <Pressable
-                    style={[styles.compactActionButton, action.variant === 'accent' ? styles.compactActionButtonAccent : styles.compactActionButtonSoft]}
-                    onPress={action.onPress}
-                    disabled={action.disabled}
-                  >
-                    <Text style={[styles.compactActionText, isRtl ? styles.textRtl : null, action.variant === 'accent' ? styles.compactActionTextAccent : styles.compactActionTextSoft]}>
-                      {action.label}
-                    </Text>
-                  </Pressable>
-                </View>
-              ) : null}
-            </View>
-          </>
-        )}
+        {content}
       </Pressable>
     </Animated.View>
   );
@@ -264,7 +294,9 @@ function VoucherRow({ voucher, display, action, badge, isCompact, redeemedSummar
 export function HomeScreen({ navigation }: Props) {
   const { user } = useAuthSession();
   const { copy, language, locale, isRtl } = useAppLanguage();
+  const { width } = useWindowDimensions();
   const vouchersQuery = useVoucherList(user?.id);
+  const deleteMutation = useDeleteVoucherMutation(user?.id);
   const markRedeemedMutation = useMarkVoucherRedeemedMutation(user?.id);
   const addUsageMutation = useAddVoucherUsageMutation(user?.id);
   const vouchers = vouchersQuery.data?.vouchers ?? [];
@@ -276,6 +308,7 @@ export function HomeScreen({ navigation }: Props) {
   const [activeDropdown, setActiveDropdown] = useState<DropdownKind | null>(null);
   const [usageVoucherId, setUsageVoucherId] = useState<string | null>(null);
   const [redeemVoucherId, setRedeemVoucherId] = useState<string | null>(null);
+  const [deleteVoucherId, setDeleteVoucherId] = useState<string | null>(null);
   const [usageAmountInput, setUsageAmountInput] = useState('');
   const [isUsageModalVisible, setUsageModalVisible] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Record<SectionKey, boolean>>({
@@ -284,6 +317,7 @@ export function HomeScreen({ navigation }: Props) {
     redeemed: false,
     expired: false,
   });
+  const isCompactFilterLayout = width < 460;
 
   const categoryOptions = useMemo(() => {
     const categories = Array.from(new Set(vouchers.map((voucher) => voucher.category ?? 'Other'))).sort((left, right) =>
@@ -424,6 +458,7 @@ export function HomeScreen({ navigation }: Props) {
 
   const selectedUsageVoucher = usageVoucherId ? vouchers.find((voucher) => voucher.id === usageVoucherId) ?? null : null;
   const selectedRedeemVoucher = redeemVoucherId ? vouchers.find((voucher) => voucher.id === redeemVoucherId) ?? null : null;
+  const selectedDeleteVoucher = deleteVoucherId ? vouchers.find((voucher) => voucher.id === deleteVoucherId) ?? null : null;
   const hasFilterControlsActive =
     sortDirection === 'newest' || selectedCategory !== ALL_FILTER_OPTION || selectedBrand !== ALL_FILTER_OPTION || searchTerm.trim().length > 0;
 
@@ -472,6 +507,10 @@ export function HomeScreen({ navigation }: Props) {
     setRedeemVoucherId(voucherId);
   }
 
+  function openDeleteModal(voucherId: string) {
+    setDeleteVoucherId(voucherId);
+  }
+
   function closeUsageModal() {
     if (addUsageMutation.isPending) {
       return;
@@ -488,6 +527,14 @@ export function HomeScreen({ navigation }: Props) {
     }
 
     setRedeemVoucherId(null);
+  }
+
+  function closeDeleteModal() {
+    if (deleteMutation.isPending) {
+      return;
+    }
+
+    setDeleteVoucherId(null);
   }
 
   async function handleSubmitUsageUpdate() {
@@ -529,6 +576,21 @@ export function HomeScreen({ navigation }: Props) {
       console.error('[HomeScreen] Redeem failed:', error);
       const message = error instanceof Error ? translateKnownMessage(error.message, language) : copy.common.updateFailedTitle;
       Alert.alert(copy.common.updateFailedTitle, message);
+    }
+  }
+
+  async function handleDeleteVoucher() {
+    if (!selectedDeleteVoucher) {
+      return;
+    }
+
+    try {
+      await deleteMutation.mutateAsync({ voucherId: selectedDeleteVoucher.id });
+      setDeleteVoucherId(null);
+    } catch (error) {
+      console.error('[HomeScreen] Delete voucher failed:', error);
+      const message = error instanceof Error ? translateKnownMessage(error.message, language) : copy.common.deleteFailedTitle;
+      Alert.alert(copy.common.deleteFailedTitle, message);
     }
   }
 
@@ -614,6 +676,7 @@ export function HomeScreen({ navigation }: Props) {
     const badge = getVoucherBadge(voucher);
     const isCompact = options?.compact ?? false;
     const redeemedSummary = isCompact && voucher.status === 'redeemed' ? getRedeemedSummary(voucher) : null;
+    const deleteDisabled = deleteMutation.isPending && deleteVoucherId === voucher.id;
 
     return (
       <VoucherRow
@@ -624,6 +687,8 @@ export function HomeScreen({ navigation }: Props) {
         badge={badge}
         isCompact={isCompact}
         redeemedSummary={redeemedSummary}
+        onDeletePress={redeemedSummary ? () => openDeleteModal(voucher.id) : undefined}
+        deleteDisabled={redeemedSummary ? deleteDisabled : undefined}
         rowStyle={options?.rowStyle}
         onPress={() => navigation.navigate('VoucherDetails', { voucherId: voucher.id })}
       />
@@ -669,24 +734,30 @@ export function HomeScreen({ navigation }: Props) {
           {!isFiltersCollapsed ? (
             <>
               <View style={[styles.dropdownRow, isRtl ? styles.rowReverse : null]}>
-                <Pressable style={styles.dropdownButton} onPress={() => openDropdown('sort')}>
-                  <Text style={[styles.dropdownLabel, isRtl ? styles.labelRtl : null]}>{copy.home.sort}</Text>
-                  <Text numberOfLines={1} style={[styles.dropdownValue, isRtl ? styles.textRtl : null]}>
-                    {sortDirection === 'oldest' ? copy.home.oldToNew : copy.home.newToOld}
-                  </Text>
-                </Pressable>
-                <Pressable style={styles.dropdownButton} onPress={() => openDropdown('category')}>
-                  <Text style={[styles.dropdownLabel, isRtl ? styles.labelRtl : null]}>{copy.home.category}</Text>
-                  <Text numberOfLines={1} style={[styles.dropdownValue, isRtl ? styles.textRtl : null]}>
-                    {selectedCategory === ALL_FILTER_OPTION ? copy.common.all : getCategoryLabel(selectedCategory, language)}
-                  </Text>
-                </Pressable>
-                <Pressable style={styles.dropdownButton} onPress={() => openDropdown('brand')}>
-                  <Text style={[styles.dropdownLabel, isRtl ? styles.labelRtl : null]}>{copy.home.brand}</Text>
-                  <Text numberOfLines={1} style={[styles.dropdownValue, isRtl ? styles.textRtl : null]}>
-                    {selectedBrand === ALL_FILTER_OPTION ? copy.common.all : selectedBrand === 'No merchant' ? copy.common.noMerchant : selectedBrand}
-                  </Text>
-                </Pressable>
+                <View style={styles.dropdownField}>
+                  <Text style={[styles.dropdownFieldLabel, isCompactFilterLayout ? styles.dropdownFieldLabelCompact : null, isRtl ? styles.labelRtl : null]}>{copy.home.sort}</Text>
+                  <Pressable style={styles.dropdownButton} onPress={() => openDropdown('sort')}>
+                    <Text numberOfLines={1} style={[styles.dropdownValue, isRtl ? styles.textRtl : null]}>
+                      {sortDirection === 'oldest' ? copy.home.oldToNew : copy.home.newToOld}
+                    </Text>
+                  </Pressable>
+                </View>
+                <View style={styles.dropdownField}>
+                  <Text style={[styles.dropdownFieldLabel, isCompactFilterLayout ? styles.dropdownFieldLabelCompact : null, isRtl ? styles.labelRtl : null]}>{copy.home.category}</Text>
+                  <Pressable style={styles.dropdownButton} onPress={() => openDropdown('category')}>
+                    <Text numberOfLines={1} style={[styles.dropdownValue, isRtl ? styles.textRtl : null]}>
+                      {selectedCategory === ALL_FILTER_OPTION ? copy.common.all : getCategoryLabel(selectedCategory, language)}
+                    </Text>
+                  </Pressable>
+                </View>
+                <View style={styles.dropdownField}>
+                  <Text style={[styles.dropdownFieldLabel, isCompactFilterLayout ? styles.dropdownFieldLabelCompact : null, isRtl ? styles.labelRtl : null]}>{copy.home.brand}</Text>
+                  <Pressable style={styles.dropdownButton} onPress={() => openDropdown('brand')}>
+                    <Text numberOfLines={1} style={[styles.dropdownValue, isRtl ? styles.textRtl : null]}>
+                      {selectedBrand === ALL_FILTER_OPTION ? copy.common.all : selectedBrand === 'No merchant' ? copy.common.noMerchant : selectedBrand}
+                    </Text>
+                  </Pressable>
+                </View>
               </View>
 
               {hasFilterControlsActive ? (
@@ -744,6 +815,28 @@ export function HomeScreen({ navigation }: Props) {
               </Pressable>
               <Pressable style={styles.modalConfirmButton} onPress={handleRedeemVoucher} disabled={markRedeemedMutation.isPending}>
                 <Text style={styles.modalConfirmText}>{markRedeemedMutation.isPending ? copy.home.redeeming : copy.home.redeem}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={deleteVoucherId !== null} transparent animationType="fade" onRequestClose={closeDeleteModal}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={[styles.modalTitle, isRtl ? styles.textRtl : null]}>{copy.voucherDetails.deleteVoucherTitle}</Text>
+            {selectedDeleteVoucher ? (
+              <Text style={[styles.modalEntityName, isRtl ? styles.textRtl : null]}>
+                {selectedDeleteVoucher.productName || selectedDeleteVoucher.title}
+              </Text>
+            ) : null}
+            <Text style={[styles.modalSubtitle, isRtl ? styles.textRtl : null]}>{copy.voucherDetails.deleteVoucherMessage}</Text>
+            <View style={[styles.modalActions, isRtl ? styles.rowReverse : null]}>
+              <Pressable style={styles.modalCancelButton} onPress={closeDeleteModal} disabled={deleteMutation.isPending}>
+                <Text style={styles.modalCancelText}>{copy.common.cancel}</Text>
+              </Pressable>
+              <Pressable style={[styles.modalConfirmButton, styles.modalConfirmButtonDestructive]} onPress={handleDeleteVoucher} disabled={deleteMutation.isPending}>
+                <Text style={styles.modalConfirmText}>{deleteMutation.isPending ? copy.common.deleting : copy.common.delete}</Text>
               </Pressable>
             </View>
           </View>
@@ -919,29 +1012,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  dropdownButton: {
+  dropdownField: {
     flex: 1,
-    minHeight: 56,
+    gap: 4,
+  },
+  dropdownButton: {
+    minHeight: 42,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: premiumTheme.colors.border,
     backgroundColor: premiumTheme.colors.surface,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 8,
+    paddingVertical: 6,
+    gap: 4,
+    justifyContent: 'center',
   },
-  dropdownLabel: {
+  dropdownFieldLabel: {
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: 0.4,
     color: premiumTheme.colors.mutedStrong,
     textTransform: 'uppercase',
   },
+  dropdownFieldLabelCompact: {
+    fontSize: 11,
+    letterSpacing: 0.2,
+  },
   dropdownValue: {
     fontSize: 13,
     fontWeight: '800',
     color: premiumTheme.colors.accentStrong,
-    lineHeight: 18,
+    lineHeight: 16,
+    flexShrink: 1,
   },
   clearFiltersButton: {
     minHeight: 36,
@@ -1083,6 +1185,14 @@ const styles = StyleSheet.create({
   voucherContentCompact: {
     gap: 4,
   },
+  redeemedSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  redeemedSummaryContent: {
+    flex: 1,
+  },
   voucherHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1116,6 +1226,31 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: premiumTheme.colors.mutedStrong,
+  },
+  redeemedDeleteButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: premiumTheme.colors.danger,
+    backgroundColor: premiumTheme.colors.dangerSoft,
+    flexShrink: 0,
+  },
+  redeemedDeleteButtonPressed: {
+    transform: [{ scale: 0.96 }],
+    backgroundColor: '#f6dede',
+  },
+  redeemedDeleteButtonDisabled: {
+    opacity: 0.6,
+  },
+  redeemedDeleteButtonText: {
+    fontSize: 16,
+    lineHeight: 16,
+    fontWeight: '900',
+    color: premiumTheme.colors.danger,
+    marginTop: -1,
   },
   statusBadge: {
     minHeight: 20,
@@ -1265,6 +1400,12 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: premiumTheme.colors.muted,
   },
+  modalEntityName: {
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '800',
+    color: premiumTheme.colors.text,
+  },
   amountInput: {
     borderWidth: 1,
     borderColor: premiumTheme.colors.border,
@@ -1303,6 +1444,10 @@ const styles = StyleSheet.create({
     backgroundColor: premiumTheme.colors.accent,
     borderWidth: 1,
     borderColor: premiumTheme.colors.accentStrong,
+  },
+  modalConfirmButtonDestructive: {
+    backgroundColor: premiumTheme.colors.danger,
+    borderColor: '#c63f3f',
   },
   modalConfirmText: {
     color: premiumTheme.colors.surfaceStrong,

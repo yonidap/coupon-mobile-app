@@ -1,7 +1,7 @@
 import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { View } from 'react-native';
+import { Image, Pressable, View } from 'react-native';
 
 import { TopBarMenu } from '../components/TopBarMenu';
 import { DEFAULT_LANGUAGE } from '../features/settings/defaults';
@@ -37,6 +37,10 @@ const navigationTheme = {
   },
 };
 
+type HeaderNavigation = {
+  navigate: (screen: 'Home' | 'Settings') => void;
+};
+
 export function AppNavigator() {
   const { isLoading, session } = useAuthSessionContext();
   const queryClient = useQueryClient();
@@ -60,6 +64,39 @@ export function AppNavigator() {
     await queryClient.invalidateQueries({ queryKey: settingsKeys.detail(userId) });
   }
 
+  function goHome(navigation: HeaderNavigation) {
+    navigation.navigate('Home');
+  }
+
+  function renderHeaderRight(navigation: HeaderNavigation, showSettings = true) {
+    return (
+      <View style={{ marginRight: 12 }}>
+        <TopBarMenu
+          currentLanguage={currentLanguage}
+          onLanguageChange={handleLanguageChange}
+          onHome={() => goHome(navigation)}
+          onSettings={() => navigation.navigate('Settings')}
+          onSignOut={() => authService.signOut()}
+          showSettings={showSettings}
+        />
+      </View>
+    );
+  }
+
+  function renderHeaderLogo(navigation: HeaderNavigation) {
+    return (
+      <Pressable
+        accessibilityLabel={copy.menu.overview}
+        accessibilityRole="button"
+        onPress={() => goHome(navigation)}
+        style={({ pressed }) => [styles.headerLogoSlot, pressed ? styles.headerLogoPressed : null]}
+        hitSlop={10}
+      >
+        <Image source={require('../../assets/icon.png')} style={styles.headerLogo} resizeMode="contain" />
+      </Pressable>
+    );
+  }
+
   return (
     <AppLanguageProvider language={currentLanguage}>
       <NavigationContainer theme={navigationTheme}>
@@ -68,10 +105,12 @@ export function AppNavigator() {
             headerStyle: {
               backgroundColor: premiumTheme.colors.backgroundSoft,
             },
+            headerTitle: () => null,
             headerTitleStyle: {
               color: premiumTheme.colors.text,
               fontWeight: '800',
             },
+            headerBackTitleVisible: false,
             headerTintColor: premiumTheme.colors.accent,
             headerShadowVisible: false,
             contentStyle: {
@@ -88,93 +127,47 @@ export function AppNavigator() {
                 name="Home"
                 component={HomeScreen}
                 options={({ navigation }) => ({
-                  title: copy.navigation.wallet,
-                  headerRight: () => (
-                    <View style={{ marginRight: 12 }}>
-                      <TopBarMenu
-                        currentLanguage={currentLanguage}
-                        onLanguageChange={handleLanguageChange}
-                        onSettings={() => navigation.navigate('Settings')}
-                        onSignOut={() => authService.signOut()}
-                      />
-                    </View>
-                  ),
+                  headerLeft: () => renderHeaderLogo(navigation),
+                  headerRight: () => renderHeaderRight(navigation),
                 })}
               />
               <Stack.Screen
                 name="VoucherDetails"
                 component={VoucherDetailsScreen}
                 options={({ navigation }) => ({
-                  title: copy.navigation.details,
-                  headerRight: () => (
-                    <View style={{ marginRight: 12 }}>
-                      <TopBarMenu
-                        currentLanguage={currentLanguage}
-                        onLanguageChange={handleLanguageChange}
-                        onSettings={() => navigation.navigate('Settings')}
-                        onSignOut={() => authService.signOut()}
-                      />
-                    </View>
-                  ),
+                  headerLeft: () => renderHeaderLogo(navigation),
+                  headerRight: () => renderHeaderRight(navigation),
                 })}
               />
               <Stack.Screen
                 name="VoucherCreateEntry"
                 component={VoucherCreateEntryScreen}
                 options={({ navigation }) => ({
-                  title: copy.home.addVoucher,
-                  headerRight: () => (
-                    <View style={{ marginRight: 12 }}>
-                      <TopBarMenu
-                        currentLanguage={currentLanguage}
-                        onLanguageChange={handleLanguageChange}
-                        onSettings={() => navigation.navigate('Settings')}
-                        onSignOut={() => authService.signOut()}
-                      />
-                    </View>
-                  ),
+                  headerLeft: () => renderHeaderLogo(navigation),
+                  headerRight: () => renderHeaderRight(navigation),
                 })}
               />
               <Stack.Screen
                 name="VoucherForm"
                 component={VoucherFormScreen}
                 options={({ navigation }) => ({
-                  title: copy.navigation.voucher,
-                  headerRight: () => (
-                    <View style={{ marginRight: 12 }}>
-                      <TopBarMenu
-                        currentLanguage={currentLanguage}
-                        onLanguageChange={handleLanguageChange}
-                        onSettings={() => navigation.navigate('Settings')}
-                        onSignOut={() => authService.signOut()}
-                      />
-                    </View>
-                  ),
+                  headerLeft: () => renderHeaderLogo(navigation),
+                  headerRight: () => renderHeaderRight(navigation),
                 })}
               />
               <Stack.Screen
                 name="Settings"
                 component={SettingsScreen}
                 options={({ navigation }) => ({
-                  title: copy.navigation.settings,
-                  headerRight: () => (
-                    <View style={{ marginRight: 12 }}>
-                      <TopBarMenu
-                        currentLanguage={currentLanguage}
-                        onLanguageChange={handleLanguageChange}
-                        showSettings={false}
-                        onSettings={() => navigation.navigate('Settings')}
-                        onSignOut={() => authService.signOut()}
-                      />
-                    </View>
-                  ),
+                  headerLeft: () => renderHeaderLogo(navigation),
+                  headerRight: () => renderHeaderRight(navigation, false),
                 })}
               />
             </>
           ) : (
             <>
-              <Stack.Screen name="Login" component={LoginScreen} options={{ title: copy.navigation.access }} />
-              <Stack.Screen name="Register" component={RegisterScreen} options={{ title: copy.navigation.access }} />
+              <Stack.Screen name="Login" component={LoginScreen} />
+              <Stack.Screen name="Register" component={RegisterScreen} />
             </>
           )}
         </Stack.Navigator>
@@ -182,3 +175,21 @@ export function AppNavigator() {
     </AppLanguageProvider>
   );
 }
+
+const styles = {
+  headerLogoSlot: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
+    marginRight: 12,
+  },
+  headerLogoPressed: {
+    opacity: 0.75,
+  },
+  headerLogo: {
+    width: 44,
+    height: 44,
+  },
+} as const;

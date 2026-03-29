@@ -26,6 +26,16 @@ type VoucherUpsertInput = {
 
 const fallbackVoucherStore = new Map<string, Voucher[]>();
 
+function normalizeVoucherCode(code: string | null | undefined): string | null {
+  const trimmed = code?.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  return trimmed.toLowerCase();
+}
+
 function mapVoucher(row: {
   id: string;
   wallet_id: string;
@@ -139,7 +149,39 @@ async function hydrateAttachments(vouchers: Voucher[]): Promise<Voucher[]> {
   }));
 }
 
+async function loadVouchersForCodeCheck(walletId: string): Promise<Voucher[]> {
+  const client = maybeGetSupabaseClient();
+
+  if (!client) {
+    return readFallbackVouchers(walletId);
+  }
+
+  const { data, error } = await client.from('vouchers').select('*').eq('wallet_id', walletId).order('expiry_date', { ascending: true });
+
+  if (error) {
+    if (isMissingRelationError(error)) {
+      return readFallbackVouchers(walletId);
+    }
+
+    throw new Error(error.message);
+  }
+
+  return data.map(mapVoucher);
+}
+
 export const vouchersRepository = {
+  async hasDuplicateCode(walletId: string, code: string, excludeVoucherId?: string): Promise<boolean> {
+    const normalizedTarget = normalizeVoucherCode(code);
+
+    if (!normalizedTarget) {
+      return false;
+    }
+
+    const vouchers = await loadVouchersForCodeCheck(walletId);
+
+    return vouchers.some((voucher) => voucher.id !== excludeVoucherId && normalizeVoucherCode(voucher.code) === normalizedTarget);
+  },
+
   async listByWallet(walletId: string): Promise<Voucher[]> {
     const client = maybeGetSupabaseClient();
 

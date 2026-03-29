@@ -1,5 +1,6 @@
 import { vouchersRepository } from '../repositories/vouchersRepository';
 import type { VoucherFormValues } from '../features/vouchers/schemas';
+import { duplicateVoucherCodeErrorMessage } from '../features/vouchers/errors';
 import { walletsService } from './walletsService';
 import { attachmentService } from './attachmentService';
 
@@ -51,6 +52,10 @@ export const voucherService = {
 
   async saveVoucher({ userId, voucherId, values }: SaveVoucherInput) {
     const wallet = await walletsService.getActiveWallet(userId);
+    if (await vouchersRepository.hasDuplicateCode(wallet.id, values.code, voucherId)) {
+      throw new Error(duplicateVoucherCodeErrorMessage);
+    }
+
     const faceValue = values.voucherType === 'monetary' ? parseOptionalAmount(values.faceValue) : null;
     const usedValue = values.voucherType === 'monetary' ? parseOptionalAmount(values.usedValue) ?? 0 : 0;
 
