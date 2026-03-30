@@ -1,9 +1,10 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
+import { FormDateField } from '../components/FormDateField';
 import { FormTextField } from '../components/FormTextField';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { SectionCard } from '../components/SectionCard';
@@ -38,6 +39,10 @@ export function VoucherFormScreen({ navigation, route }: Props) {
   const autoPickAttemptedRef = useRef(false);
   const [autoFillMessage, setAutoFillMessage] = useState<{
     tone: 'info' | 'warning' | 'error';
+    text: string;
+  } | null>(null);
+  const [submitMessage, setSubmitMessage] = useState<{
+    tone: 'info' | 'error';
     text: string;
   } | null>(null);
 
@@ -92,6 +97,13 @@ export function VoucherFormScreen({ navigation, route }: Props) {
     return 'message' in firstError && typeof firstError.message === 'string'
       ? translateKnownMessage(firstError.message, language)
       : copy.voucherForm.reviewHighlightedFields;
+  }
+
+  function showFeedbackAlert(title: string, message: string): void {
+    setSubmitMessage({
+      tone: 'error',
+      text: `${title}: ${message}`,
+    });
   }
 
   function toFormAmount(value: number): string {
@@ -240,7 +252,7 @@ export function VoucherFormScreen({ navigation, route }: Props) {
       }
     } catch (error) {
       console.error('[VoucherFormScreen] Attachment pick failed:', error);
-      Alert.alert(copy.voucherForm.attachmentFailedTitle, copy.voucherForm.attachmentFailedMessage);
+      showFeedbackAlert(copy.voucherForm.attachmentFailedTitle, copy.voucherForm.attachmentFailedMessage);
     }
   }
 
@@ -255,6 +267,8 @@ export function VoucherFormScreen({ navigation, route }: Props) {
 
   const onSubmit = handleSubmit(
     async (values) => {
+      setSubmitMessage(null);
+
       if (hasDuplicateCode(values.code)) {
         setError('code', {
           type: 'duplicate',
@@ -269,7 +283,6 @@ export function VoucherFormScreen({ navigation, route }: Props) {
           values,
         });
 
-        Alert.alert(copy.voucherForm.voucherSavedTitle, copy.voucherForm.voucherSavedMessage);
         navigation.replace('VoucherDetails', { voucherId: savedVoucher.id });
       } catch (error) {
         console.error('[VoucherFormScreen] Save voucher failed:', error);
@@ -283,12 +296,15 @@ export function VoucherFormScreen({ navigation, route }: Props) {
           return;
         }
 
-        Alert.alert(copy.voucherForm.unableToSaveVoucherTitle, error instanceof Error ? translateKnownMessage(error.message, language) : copy.voucherForm.unableToSaveVoucherMessage);
+        showFeedbackAlert(
+          copy.voucherForm.unableToSaveVoucherTitle,
+          error instanceof Error ? translateKnownMessage(error.message, language) : copy.voucherForm.unableToSaveVoucherMessage,
+        );
       }
     },
     () => {
       console.error('[VoucherFormScreen] Validation failed:', errors);
-      Alert.alert(copy.voucherForm.formIncompleteTitle, getValidationMessage());
+      showFeedbackAlert(copy.voucherForm.formIncompleteTitle, getValidationMessage());
     },
   );
 
@@ -297,6 +313,7 @@ export function VoucherFormScreen({ navigation, route }: Props) {
       {voucherId && voucherQuery.isLoading ? <ActivityIndicator color={premiumTheme.colors.accent} /> : null}
       <SectionCard>
         {Object.keys(errors).length > 0 ? <Text style={styles.errorText}>{getValidationMessage()}</Text> : null}
+        {submitMessage ? <Text style={submitMessage.tone === 'error' ? styles.errorText : styles.infoText}>{submitMessage.text}</Text> : null}
 
         <Text style={[styles.typeLabel, isRtl ? styles.labelRtl : null]}>{copy.voucherForm.type}</Text>
         <View style={[styles.typeSelectorRow, isRtl ? styles.rowReverse : null]}>
@@ -425,12 +442,10 @@ export function VoucherFormScreen({ navigation, route }: Props) {
           control={control}
           name="expiryDate"
           render={({ field: { value, onChange } }) => (
-            <FormTextField
+            <FormDateField
               label={copy.voucherForm.expiryDate}
               value={value}
               onChangeText={onChange}
-              placeholder={copy.voucherForm.expiryDatePlaceholder}
-              autoCapitalize="none"
               error={errors.expiryDate?.message ? translateKnownMessage(errors.expiryDate.message, language) : undefined}
             />
           )}
@@ -631,6 +646,10 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: premiumTheme.colors.danger,
+    fontSize: 14,
+  },
+  infoText: {
+    color: premiumTheme.colors.accentStrong,
     fontSize: 14,
   },
 });

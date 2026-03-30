@@ -23,6 +23,71 @@ import { premiumTheme } from '../theme/premium';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'VoucherDetails'>;
 type ConfirmActionType = 'markRedeemed' | 'delete' | null;
+type NoteSegment = {
+  text: string;
+  url?: string;
+};
+
+const noteLinkPattern =
+  /\b((?:https?:\/\/|www\.)[^\s<>"']+|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}(?::\d{2,5})?(?:\/[^\s<>"']*)?)/gi;
+const trailingNoteLinkPunctuationPattern = /[),.;:!?]+$/;
+
+function normalizeNoteUrl(rawValue: string): string {
+  if (/^https?:\/\//i.test(rawValue)) {
+    return rawValue;
+  }
+
+  return `https://${rawValue}`;
+}
+
+function splitNoteSegments(note: string): NoteSegment[] {
+  const segments: NoteSegment[] = [];
+  let cursor = 0;
+  const matcher = new RegExp(noteLinkPattern);
+
+  for (const match of note.matchAll(matcher)) {
+    const index = match.index ?? 0;
+    const matchedValue = match[0];
+
+    if (index > cursor) {
+      segments.push({ text: note.slice(cursor, index) });
+    }
+
+    const trailingMatch = matchedValue.match(trailingNoteLinkPunctuationPattern);
+    const trailing = trailingMatch?.[0] ?? '';
+    const cleanValue = trailing ? matchedValue.slice(0, -trailing.length) : matchedValue;
+
+    if (cleanValue) {
+      const hasLinkPrefix = /^(?:https?:\/\/|www\.)/i.test(cleanValue);
+      const isEmailContext = !hasLinkPrefix && index > 0 && note[index - 1] === '@';
+
+      if (isEmailContext) {
+        segments.push({ text: cleanValue });
+      } else {
+        segments.push({
+          text: cleanValue,
+          url: normalizeNoteUrl(cleanValue),
+        });
+      }
+    }
+
+    if (trailing) {
+      segments.push({ text: trailing });
+    }
+
+    cursor = index + matchedValue.length;
+  }
+
+  if (cursor < note.length) {
+    segments.push({ text: note.slice(cursor) });
+  }
+
+  if (segments.length === 0) {
+    return [{ text: note }];
+  }
+
+  return segments;
+}
 
 export function VoucherDetailsScreen({ navigation, route }: Props) {
   const { user } = useAuthSession();
@@ -78,6 +143,29 @@ export function VoucherDetailsScreen({ navigation, route }: Props) {
       console.error('[VoucherDetailsScreen] Open attachment failed:', error);
       setAttachmentError(copy.voucherDetails.attachmentFailedMessage);
     }
+  }
+
+  async function handleOpenNoteLink(url: string) {
+    try {
+      await Linking.openURL(url);
+    } catch (error) {
+      console.error('[VoucherDetailsScreen] Open notes link failed:', error);
+    }
+  }
+
+  function renderNotesText(note: string) {
+    return splitNoteSegments(note).map((segment, index) => {
+      if (!segment.url) {
+        return segment.text;
+      }
+
+      const linkUrl = segment.url;
+      return (
+        <Text key={`${linkUrl}-${index}`} style={styles.notesLink} onPress={() => void handleOpenNoteLink(linkUrl)}>
+          {segment.text}
+        </Text>
+      );
+    });
   }
 
   function handleMarkRedeemed() {
@@ -238,9 +326,34 @@ export function VoucherDetailsScreen({ navigation, route }: Props) {
                 <Text style={[styles.label, isRtl ? styles.textRtl : null]}>{copy.voucherDetails.redeemedAt}</Text>
                 <Text style={[styles.value, isRtl ? styles.valueRtl : null]}>{formatDateLabel(voucher.redeemedAt, { locale, missingLabel: copy.common.notSet })}</Text>
               </View>
+              {voucher.attachments.length === 0 ? (
+                <View style={[styles.row, isRtl ? styles.rowReverse : null]}>
+                  <Text style={[styles.label, isRtl ? styles.textRtl : null]}>{copy.voucherDetails.attachment}</Text>
+                  <Text style={[styles.value, isRtl ? styles.valueRtl : null]}>{copy.voucherDetails.noAttachments}</Text>
+                </View>
+              ) : (
+                <>
+                  {voucher.attachments.map((attachment) => (
+                    <Pressable
+                      key={attachment.id}
+                      style={[styles.row, styles.rowPressable, isRtl ? styles.rowReverse : null]}
+                      onPress={() => handleOpenAttachment(attachment.id)}
+                    >
+                      <Text style={[styles.label, isRtl ? styles.textRtl : null]}>{copy.voucherDetails.attachment}</Text>
+                      <View style={[styles.attachmentValueGroup, isRtl ? styles.attachmentValueGroupRtl : null]}>
+                        <Text style={[styles.value, styles.attachmentFileValue, isRtl ? styles.valueRtl : null]} numberOfLines={1}>
+                          {attachment.fileName ?? attachment.storagePath}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  ))}
+                </>
+              )}
               <View style={[styles.rowStack, isRtl ? styles.rowStackRtl : null]}>
                 <Text style={[styles.label, isRtl ? styles.textRtl : null]}>{copy.voucherDetails.notes}</Text>
-                <Text style={[styles.notesText, isRtl ? styles.textRtl : null]}>{voucher.notes || copy.common.noNotesYet}</Text>
+                <Text style={[styles.notesText, isRtl ? styles.textRtl : null]}>
+                  {voucher.notes?.trim() ? renderNotesText(voucher.notes) : copy.common.noNotesYet}
+                </Text>
               </View>
             </View>
             <Pressable style={styles.primaryButton} onPress={() => navigation.navigate('VoucherForm', { voucherId: voucher.id })}>
@@ -259,19 +372,6 @@ export function VoucherDetailsScreen({ navigation, route }: Props) {
             <Pressable style={styles.deleteButton} onPress={handleDelete} disabled={deleteMutation.isPending}>
               <Text style={styles.deleteButtonText}>{deleteMutation.isPending ? copy.common.deleting : copy.voucherDetails.deleteVoucher}</Text>
             </Pressable>
-
-            {voucher.attachments.length === 0 ? (
-              <Text style={[styles.notesText, isRtl ? styles.textRtl : null]}>{copy.voucherDetails.noAttachments}</Text>
-            ) : (
-              <>
-                {voucher.attachments.map((attachment) => (
-                  <Pressable key={attachment.id} style={[styles.attachmentRow, isRtl ? styles.rowReverse : null]} onPress={() => handleOpenAttachment(attachment.id)}>
-                    <Text style={[styles.value, isRtl ? styles.valueRtl : null]}>{attachment.fileName ?? attachment.storagePath}</Text>
-                    <Text style={[styles.attachmentMeta, isRtl ? styles.textRtl : null]}>{copy.voucherDetails.openAttachment}</Text>
-                  </Pressable>
-                ))}
-              </>
-            )}
             {attachmentError ? <Text style={styles.errorText}>{attachmentError}</Text> : null}
           </SectionCard>
 
@@ -376,26 +476,27 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: premiumTheme.colors.muted,
   },
+  notesLink: {
+    color: premiumTheme.colors.accent,
+    textDecorationLine: 'underline',
+    fontWeight: '700',
+  },
   rowStackRtl: {
     alignItems: 'flex-end',
   },
-  attachmentRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: premiumTheme.radius.md,
+  rowPressable: {
     backgroundColor: premiumTheme.colors.surfaceStrong,
-    borderWidth: 1,
-    borderColor: premiumTheme.colors.border,
   },
-  attachmentMeta: {
-    fontSize: 12,
+  attachmentValueGroup: {
+    flexShrink: 1,
+    alignItems: 'flex-end',
+    gap: 3,
+  },
+  attachmentFileValue: {
     color: premiumTheme.colors.accent,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
+  },
+  attachmentValueGroupRtl: {
+    alignItems: 'flex-start',
   },
   primaryButton: {
     minHeight: 48,

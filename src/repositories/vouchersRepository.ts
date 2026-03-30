@@ -21,6 +21,7 @@ type VoucherUpsertInput = {
   purchaseDate: string | null;
   expiryDate: string;
   code: string | null;
+  updateCode?: boolean;
   notes: string | null;
 };
 
@@ -229,36 +230,103 @@ export const vouchersRepository = {
 
   async upsert(input: VoucherUpsertInput): Promise<Voucher> {
     const client = maybeGetSupabaseClient();
+    const shouldUpdateCode = input.updateCode ?? true;
 
     if (!client) {
+      if (input.voucherId && !shouldUpdateCode) {
+        const existing = readFallbackVouchers(input.walletId).find((voucher) => voucher.id === input.voucherId);
+        return upsertFallbackVoucher({
+          ...input,
+          code: existing?.code ?? input.code,
+        });
+      }
+
       return upsertFallbackVoucher(input);
+    }
+
+    if (!input.voucherId) {
+      const { data, error } = await client
+        .from('vouchers')
+        .insert({
+          wallet_id: input.walletId,
+          created_by_user_id: input.createdByUserId,
+          voucher_type: input.voucherType,
+          title: input.title,
+          product_name: input.productName,
+          merchant_name: input.merchantName,
+          category: input.category,
+          face_value: input.faceValue,
+          used_value: input.usedValue,
+          paid_value: input.paidValue,
+          currency: input.currency,
+          purchase_date: input.purchaseDate,
+          expiry_date: input.expiryDate,
+          code: input.code,
+          notes: input.notes,
+          source_type: 'manual',
+          metadata: {},
+          updated_at: new Date().toISOString(),
+        })
+        .select('*')
+        .single();
+
+      if (error) {
+        if (isMissingRelationError(error)) {
+          return upsertFallbackVoucher(input);
+        }
+
+        throw new Error(error.message);
+      }
+
+      return mapVoucher(data);
+    }
+
+    const updatePayload: {
+      voucher_type: VoucherUpsertInput['voucherType'];
+      title: string;
+      product_name: string | null;
+      merchant_name: string | null;
+      category: VoucherCategory;
+      face_value: number | null;
+      used_value: number;
+      paid_value: number | null;
+      currency: string;
+      purchase_date: string | null;
+      expiry_date: string;
+      notes: string | null;
+      source_type: 'manual';
+      metadata: Record<string, never>;
+      updated_at: string;
+      code?: string | null;
+    } = {
+      voucher_type: input.voucherType,
+      title: input.title,
+      product_name: input.productName,
+      merchant_name: input.merchantName,
+      category: input.category,
+      face_value: input.faceValue,
+      used_value: input.usedValue,
+      paid_value: input.paidValue,
+      currency: input.currency,
+      purchase_date: input.purchaseDate,
+      expiry_date: input.expiryDate,
+      notes: input.notes,
+      source_type: 'manual',
+      metadata: {},
+      updated_at: new Date().toISOString(),
+    };
+
+    if (shouldUpdateCode) {
+      updatePayload.code = input.code;
     }
 
     const { data, error } = await client
       .from('vouchers')
-      .upsert({
-        id: input.voucherId,
-        wallet_id: input.walletId,
-        created_by_user_id: input.createdByUserId,
-        voucher_type: input.voucherType,
-        title: input.title,
-        product_name: input.productName,
-        merchant_name: input.merchantName,
-        category: input.category,
-        face_value: input.faceValue,
-        used_value: input.usedValue,
-        paid_value: input.paidValue,
-        currency: input.currency,
-        purchase_date: input.purchaseDate,
-        expiry_date: input.expiryDate,
-        code: input.code,
-        notes: input.notes,
-        source_type: 'manual',
-        metadata: {},
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
+      .eq('wallet_id', input.walletId)
+      .eq('id', input.voucherId)
       .select('*')
-      .single();
+      .maybeSingle();
 
     if (error) {
       if (isMissingRelationError(error)) {
@@ -266,6 +334,10 @@ export const vouchersRepository = {
       }
 
       throw new Error(error.message);
+    }
+
+    if (!data) {
+      throw new Error('Voucher not found.');
     }
 
     return mapVoucher(data);

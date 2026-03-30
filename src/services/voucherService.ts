@@ -29,6 +29,16 @@ function parseOptionalAmount(value: string): number | null {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
+function normalizeVoucherCode(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  return trimmed.toLowerCase();
+}
+
 export const voucherService = {
   async listForUser(userId: string) {
     const wallet = await walletsService.getActiveWallet(userId);
@@ -52,7 +62,24 @@ export const voucherService = {
 
   async saveVoucher({ userId, voucherId, values }: SaveVoucherInput) {
     const wallet = await walletsService.getActiveWallet(userId);
-    if (await vouchersRepository.hasDuplicateCode(wallet.id, values.code, voucherId)) {
+    let shouldCheckDuplicateCode = true;
+    let shouldUpdateCode = true;
+
+    if (voucherId) {
+      const currentVoucher = await vouchersRepository.getById(wallet.id, voucherId);
+
+      if (!currentVoucher) {
+        throw new Error('Voucher not found.');
+      }
+
+      const currentCode = normalizeVoucherCode(currentVoucher.code);
+      const nextCode = normalizeVoucherCode(values.code);
+
+      shouldUpdateCode = currentCode !== nextCode;
+      shouldCheckDuplicateCode = shouldUpdateCode;
+    }
+
+    if (shouldCheckDuplicateCode && (await vouchersRepository.hasDuplicateCode(wallet.id, values.code, voucherId))) {
       throw new Error(duplicateVoucherCodeErrorMessage);
     }
 
@@ -74,7 +101,8 @@ export const voucherService = {
       currency: values.currency,
       purchaseDate: null,
       expiryDate: values.expiryDate,
-      code: values.code || null,
+      code: values.code.trim() || null,
+      updateCode: shouldUpdateCode,
       notes: values.notes || null,
     });
 

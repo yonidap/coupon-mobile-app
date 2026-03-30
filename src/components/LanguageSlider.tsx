@@ -15,7 +15,17 @@ type LanguageSliderProps = {
 };
 
 const TRACK_PADDING = 4;
+const TRACK_SIDE_PADDING_LEFT = 4;
+const TRACK_SIDE_PADDING_RIGHT = 5;
 const TRACK_GAP = 4;
+const COMPACT_LANGUAGE_LABELS: Record<SupportedLanguage, string> = {
+  en: 'EN',
+  he: 'עב',
+};
+const REGULAR_LANGUAGE_LABELS: Record<SupportedLanguage, string> = {
+  en: 'English',
+  he: 'עברית',
+};
 
 export function LanguageSlider({ value, onChange, disabled = false, compact = false, style }: LanguageSliderProps) {
   const [trackWidth, setTrackWidth] = useState(0);
@@ -39,7 +49,7 @@ export function LanguageSlider({ value, onChange, disabled = false, compact = fa
     }
   }
 
-  const innerWidth = Math.max(trackWidth - TRACK_PADDING * 2, 0);
+  const innerWidth = Math.max(trackWidth - TRACK_SIDE_PADDING_LEFT - TRACK_SIDE_PADDING_RIGHT, 0);
   const thumbWidth = Math.max((innerWidth - TRACK_GAP) / 2, 0);
   const translateX = progress.interpolate({
     inputRange: [0, 1],
@@ -81,7 +91,7 @@ export function LanguageSlider({ value, onChange, disabled = false, compact = fa
               style={({ pressed }) => [styles.option, compactOptionStyle, pressed && !disabled ? styles.optionPressed : null]}
             >
               <Text style={[styles.optionText, compactTextStyle, isSelected ? styles.optionTextActive : null]}>
-                {compact ? (language === 'en' ? 'EN' : 'HE') : language === 'en' ? copy.language.english : copy.language.hebrew}
+                {compact ? COMPACT_LANGUAGE_LABELS[language] : REGULAR_LANGUAGE_LABELS[language]}
               </Text>
             </Pressable>
           );
@@ -99,8 +109,11 @@ const styles = StyleSheet.create({
     position: 'relative',
     flexDirection: 'row',
     alignItems: 'center',
+    direction: 'ltr',
     minHeight: 56,
-    padding: TRACK_PADDING,
+    paddingVertical: TRACK_PADDING,
+    paddingLeft: TRACK_SIDE_PADDING_LEFT,
+    paddingRight: TRACK_SIDE_PADDING_RIGHT,
     borderRadius: 18,
     backgroundColor: premiumTheme.colors.surfaceTint,
     borderWidth: 1,
@@ -115,7 +128,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: TRACK_PADDING,
     bottom: TRACK_PADDING,
-    left: TRACK_PADDING,
+    left: TRACK_SIDE_PADDING_LEFT,
     borderRadius: 14,
     backgroundColor: premiumTheme.colors.accentSoft,
     borderWidth: 1,

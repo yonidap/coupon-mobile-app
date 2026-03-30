@@ -162,6 +162,7 @@ export type AppCopy = {
     usedValue: string;
     remainingValue: string;
     product: string;
+    attachment: string;
     code: string;
     status: string;
     redeemedAt: string;
@@ -398,6 +399,7 @@ const englishCopy: AppCopy = {
     usedValue: 'Used value',
     remainingValue: 'Remaining value',
     product: 'Product',
+    attachment: 'Attachment',
     code: 'Code',
     status: 'Status',
     redeemedAt: 'Redeemed at',
@@ -652,6 +654,7 @@ const hebrewCopy: AppCopy = {
     usedValue: 'ערך שנוצל',
     remainingValue: 'ערך שנותר',
     product: 'מוצר',
+    attachment: 'קובץ מצורף',
     code: 'קוד',
     status: 'סטטוס',
     redeemedAt: 'נפדה ב',

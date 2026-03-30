@@ -263,6 +263,7 @@ const styles = StyleSheet.create({
   dangerText: {
     color: premiumTheme.colors.danger,
   },
+  
   languageItem: {
     flexDirection: 'row',
     alignItems: 'center',
